@@ -6,6 +6,7 @@ import { ScoringService } from '../engine/scoring';
 import { TiebreakerService } from '../engine/tiebreaker';
 import { PlayoffService } from '../engine/playoffs';
 import { StandingsService } from '../engine/standings';
+import { ScheduleGenerator } from '../engine/scheduleGenerator';
 
 const STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_DB_V1';
 const BACKUP_STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_BACKUPS_V1';
@@ -356,9 +357,12 @@ export class DatabaseEngine {
     }
 
     const now = new Date().toISOString();
+    const regularSeasonWeeks = state.settings.seasonLength || 15;
+    const semifinalWeek = regularSeasonWeeks + 1;
+    const championshipWeek = regularSeasonWeeks + 2;
 
-    // If Week 15, perform Week 15 finalization per Section 44
-    if (weekNumber === 15) {
+    // If Regular Season final week, perform Quota Lock and Playoff Generation
+    if (weekNumber === regularSeasonWeeks) {
       const standings = StandingsService.calculateStandings(
         seasonId,
         state.teams,
@@ -383,79 +387,97 @@ export class DatabaseEngine {
           quota: team.currentQuota,
           effectiveFrom: now,
           locked: true,
-          reason: 'Locked permanently for Week 16 Semifinals & Championship Playoffs.',
+          reason: `Locked permanently for Week ${semifinalWeek} Semifinals & Championship Playoffs.`,
           createdAt: now
         });
       });
 
-      // Generate Week 16 Semifinals (Seed 1 vs Seed 4, Seed 2 vs Seed 3)
-      const sfGen = PlayoffService.generateSemifinals(seasonId, standings, state.courses[0]?.id ?? 1);
-      sfGen.playoffMatches.forEach(pm => state.playoffs.push(pm));
-      sfGen.fixtures.forEach((fix, idx) => {
-        const newFix: Fixture = {
-          id: Date.now() + idx + 100,
-          seasonId,
-          weekNumber: 16,
-          phase: 'SEMIFINALS',
-          fixtureDate: fix.fixtureDate!,
-          deadline: fix.deadline!,
-          courseId: fix.courseId!,
-          teamAId: fix.teamAId!,
-          teamBId: fix.teamBId!,
-          status: 'OPEN',
-          isPlayoff: true,
-          playoffRound: 'SEMIFINAL',
-          playoffMatchNumber: fix.playoffMatchNumber,
-          notes: fix.notes,
-          createdAt: now,
-          updatedAt: now
+      // Generate Semifinals (Seed 1 vs Seed 4, Seed 2 vs Seed 3) if at least 4 teams
+      if (standings.length >= 4) {
+        const sfGen = PlayoffService.generateSemifinals(seasonId, standings, state.courses[0]?.id ?? 1);
+        sfGen.playoffMatches.forEach(pm => state.playoffs.push(pm));
+        sfGen.fixtures.forEach((fix, idx) => {
+          const newFix: Fixture = {
+            id: Date.now() + idx + 100,
+            seasonId,
+            weekNumber: semifinalWeek,
+            phase: 'SEMIFINALS',
+            fixtureDate: fix.fixtureDate!,
+            deadline: fix.deadline!,
+            courseId: fix.courseId!,
+            teamAId: fix.teamAId!,
+            teamBId: fix.teamBId!,
+            status: 'OPEN',
+            isPlayoff: true,
+            playoffRound: 'SEMIFINAL',
+            playoffMatchNumber: fix.playoffMatchNumber,
+            notes: fix.notes,
+            createdAt: now,
+            updatedAt: now
+          };
+          state.fixtures.push(newFix);
+          sfGen.playoffMatches[idx].fixtureId = newFix.id;
+        });
+
+        // Generate Consolation matches for Seeds 5+
+        if (standings.length > 4) {
+          const consolationGen = PlayoffService.generateConsolationMatches(seasonId, standings, state.courses[0]?.id ?? 1);
+          consolationGen.playoffMatches.forEach(pm => state.playoffs.push(pm));
+          consolationGen.fixtures.forEach((fix, idx) => {
+            const newFix: Fixture = {
+              id: Date.now() + idx + 200,
+              seasonId,
+              weekNumber: semifinalWeek,
+              phase: 'CONSOLATION',
+              fixtureDate: fix.fixtureDate!,
+              deadline: fix.deadline!,
+              courseId: fix.courseId!,
+              teamAId: fix.teamAId!,
+              teamBId: fix.teamBId!,
+              status: 'OPEN',
+              isPlayoff: true,
+              playoffRound: 'CONSOLATION',
+              playoffMatchNumber: fix.playoffMatchNumber,
+              notes: fix.notes,
+              createdAt: now,
+              updatedAt: now
+            };
+            state.fixtures.push(newFix);
+            consolationGen.playoffMatches[idx].fixtureId = newFix.id;
+          });
+        }
+
+        season.currentWeek = semifinalWeek;
+        season.currentPhase = 'SEMIFINALS';
+        season.status = 'PLAYOFFS';
+        season.updatedAt = now;
+
+        this.saveState(state);
+        this.logAudit('WEEK_FINALISED', 'SEASON', seasonId, `Week ${weekNumber} Regular Season`, `Week ${semifinalWeek} Semifinals`, `Week ${weekNumber} completed, Quotas Locked, Playoff Brackets Generated.`);
+        this.logAudit('QUOTA_LOCKED', 'SEASON', seasonId, undefined, 'All team quotas locked for playoffs', `Week ${weekNumber} Finalisation Rule`);
+        this.logAudit('PLAYOFF_CREATED', 'PLAYOFFS', undefined, undefined, `Top 4: ${standings.slice(0, 4).map(s => `#${s.position} ${s.teamName}`).join(', ')}`, 'Generated Semifinals 1v4 and 2v3.');
+
+        return {
+          success: true,
+          message: `Week ${weekNumber} finalized successfully! All team quotas are now LOCKED. Playoff Semifinals (Seed 1 vs 4, Seed 2 vs 3) and Consolation Bowl have been generated for Week ${semifinalWeek}.`
         };
-        state.fixtures.push(newFix);
-        sfGen.playoffMatches[idx].fixtureId = newFix.id;
-      });
-
-      // Generate Consolation matches for Seeds 5 to 10
-      const consolationGen = PlayoffService.generateConsolationMatches(seasonId, standings, state.courses[0]?.id ?? 1);
-      consolationGen.playoffMatches.forEach(pm => state.playoffs.push(pm));
-      consolationGen.fixtures.forEach((fix, idx) => {
-        const newFix: Fixture = {
-          id: Date.now() + idx + 200,
-          seasonId,
-          weekNumber: 16,
-          phase: 'CONSOLATION',
-          fixtureDate: fix.fixtureDate!,
-          deadline: fix.deadline!,
-          courseId: fix.courseId!,
-          teamAId: fix.teamAId!,
-          teamBId: fix.teamBId!,
-          status: 'OPEN',
-          isPlayoff: true,
-          playoffRound: 'CONSOLATION',
-          playoffMatchNumber: fix.playoffMatchNumber,
-          notes: fix.notes,
-          createdAt: now,
-          updatedAt: now
+      } else {
+        // Less than 4 teams, complete season directly
+        const champ = standings[0];
+        const runnerUp = standings[1];
+        season.championTeamId = champ?.teamId;
+        season.runnerUpTeamId = runnerUp?.teamId;
+        season.currentPhase = 'COMPLETED';
+        season.status = 'COMPLETED';
+        season.updatedAt = now;
+        this.saveState(state);
+        return {
+          success: true,
+          message: `Regular Season completed! ${champ?.teamName || 'Leader'} finished in 1st place.`
         };
-        state.fixtures.push(newFix);
-        consolationGen.playoffMatches[idx].fixtureId = newFix.id;
-      });
-
-      season.currentWeek = 16;
-      season.currentPhase = 'SEMIFINALS';
-      season.status = 'PLAYOFFS';
-      season.updatedAt = now;
-
-      this.saveState(state);
-      this.logAudit('WEEK_FINALISED', 'SEASON', seasonId, 'Week 15 Regular Season', 'Week 16 Semifinals', 'Week 15 completed, Quotas Locked, Playoff Brackets Generated.');
-      this.logAudit('QUOTA_LOCKED', 'SEASON', seasonId, undefined, 'All team quotas locked for playoffs', 'Week 15 Finalisation Rule');
-      this.logAudit('PLAYOFF_CREATED', 'PLAYOFFS', undefined, undefined, `Top 4: ${standings.slice(0, 4).map(s => `#${s.position} ${s.teamName}`).join(', ')}`, 'Generated Semifinals 1v4 and 2v3.');
-
-      return {
-        success: true,
-        message: `Week 15 finalized successfully! All team quotas are now LOCKED. Playoff Semifinals (Seed 1 vs 4, Seed 2 vs 3) and Consolation Bowl have been generated for Week 16.`
-      };
-    } else if (weekNumber === 16) {
-      // Finalize Semifinals and advance to Week 17 Championship
+      }
+    } else if (weekNumber === semifinalWeek) {
+      // Finalize Semifinals and advance to Championship
       const sfMatches = state.playoffs.filter(p => p.seasonId === seasonId && p.round === 'SEMIFINAL');
       const sf1 = sfMatches.find(p => p.seedA === 1);
       const sf2 = sfMatches.find(p => p.seedA === 2);
@@ -469,7 +491,7 @@ export class DatabaseEngine {
 
       if (!teamA || !teamB) return { success: false, message: 'Winning teams not found.' };
 
-      // Generate Week 17 Championship Match
+      // Generate Championship Match
       const champ = PlayoffService.generateChampionshipMatch(
         seasonId,
         teamA.id,
@@ -484,7 +506,7 @@ export class DatabaseEngine {
       const champFixture: Fixture = {
         id: Date.now() + 300,
         seasonId,
-        weekNumber: 17,
+        weekNumber: championshipWeek,
         phase: 'CHAMPIONSHIP',
         fixtureDate: champ.fixture.fixtureDate!,
         deadline: champ.fixture.deadline!,
@@ -495,25 +517,25 @@ export class DatabaseEngine {
         isPlayoff: true,
         playoffRound: 'CHAMPIONSHIP',
         playoffMatchNumber: 1,
-        notes: `Week 17 Championship Match: ${teamA.teamName} vs ${teamB.teamName}`,
+        notes: `Week ${championshipWeek} Championship Match: ${teamA.teamName} vs ${teamB.teamName}`,
         createdAt: now,
         updatedAt: now
       };
       state.fixtures.push(champFixture);
       champ.championshipMatch.fixtureId = champFixture.id;
 
-      season.currentWeek = 17;
+      season.currentWeek = championshipWeek;
       season.currentPhase = 'CHAMPIONSHIP';
       season.updatedAt = now;
 
       this.saveState(state);
-      this.logAudit('SEMIFINAL_COMPLETED', 'PLAYOFFS', undefined, undefined, `Winners: ${teamA.teamName} & ${teamB.teamName}`, 'Advanced to Week 17 Championship Match.');
+      this.logAudit('SEMIFINAL_COMPLETED', 'PLAYOFFS', undefined, undefined, `Winners: ${teamA.teamName} & ${teamB.teamName}`, `Advanced to Week ${championshipWeek} Championship Match.`);
 
       return {
         success: true,
-        message: `Week 16 Semifinals finalized! Winners (${teamA.teamName} and ${teamB.teamName}) have advanced to the Week 17 Championship Match.`
+        message: `Week ${semifinalWeek} Semifinals finalized! Winners (${teamA.teamName} and ${teamB.teamName}) have advanced to the Week ${championshipWeek} Championship Match.`
       };
-    } else if (weekNumber === 17) {
+    } else if (weekNumber === championshipWeek) {
       // Finalize Championship
       const champMatch = state.playoffs.find(p => p.seasonId === seasonId && p.round === 'CHAMPIONSHIP');
       if (!champMatch?.winnerTeamId) {
@@ -531,14 +553,14 @@ export class DatabaseEngine {
       season.updatedAt = now;
 
       this.saveState(state);
-      this.logAudit('CHAMPIONSHIP_COMPLETED', 'SEASON', seasonId, undefined, `Champion: ${champTeam?.teamName}, Runner-Up: ${runnerUpTeam?.teamName}`, '2026 Season Official Completion');
+      this.logAudit('CHAMPIONSHIP_COMPLETED', 'SEASON', seasonId, undefined, `Champion: ${champTeam?.teamName}, Runner-Up: ${runnerUpTeam?.teamName}`, 'Season Official Completion');
 
       return {
         success: true,
-        message: `🏆 Season Completed! ${champTeam?.teamName} is crowned the 2026 Pairs Golf League Champion!`
+        message: `🏆 Season Completed! ${champTeam?.teamName} is crowned the Pairs Golf League Champion!`
       };
     } else {
-      // Regular week 1 to 14
+      // Regular week prior to final week
       season.currentWeek = weekNumber + 1;
       season.updatedAt = now;
       this.saveState(state);
@@ -1164,6 +1186,320 @@ export class DatabaseEngine {
     state.settings = { ...state.settings, ...newSettings };
     this.saveState(state);
     this.logAudit('SETTINGS_UPDATED', 'SETTINGS', undefined, undefined, 'Updated application settings', 'Administrator modified preferences.');
+  }
+
+  /**
+   * Completely removes all seed data (players, teams, fixtures, scores, results, quota histories, playoffs).
+   * Creates a fresh blank database ready for custom league administration.
+   */
+  public static removeAllSeedData(keepCourses: boolean = true): { success: boolean; message: string } {
+    const state = this.getState();
+    const now = new Date().toISOString();
+    const seasonWeeks = state.settings.seasonLength || 15;
+
+    const freshSeason: Season = {
+      id: Date.now(),
+      name: `${state.settings.societyName || 'Pairs Golf'} Championship Season`,
+      startDate: now.split('T')[0],
+      endDate: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      currentWeek: 1,
+      totalWeeks: seasonWeeks,
+      status: 'ACTIVE',
+      currentPhase: 'REGULAR_SEASON',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const defaultCourses: Course[] = keepCourses && state.courses.length > 0 ? state.courses : [
+      {
+        id: 1,
+        courseName: 'Championship Golf Links',
+        location: 'Coastal Links',
+        holes: 18,
+        par: 72,
+        tees: 'White',
+        active: true,
+        createdAt: now,
+        updatedAt: now
+      }
+    ];
+
+    const cleanState: DatabaseState = {
+      version: '1.0.0',
+      seasons: [freshSeason],
+      players: [],
+      teams: [],
+      courses: defaultCourses,
+      fixtures: [],
+      playerScores: [],
+      teamResults: [],
+      quotaHistory: [],
+      playoffs: [],
+      standings: [],
+      auditLogs: [
+        {
+          id: Date.now(),
+          seasonId: freshSeason.id,
+          userId: state.settings.currentUserName || 'Administrator',
+          action: 'DATABASE_CLEARED',
+          entityType: 'DATABASE',
+          newValue: 'Clean Blank Slate (0 Teams, 0 Players, 0 Fixtures)',
+          reason: 'Administrator removed all seed data to configure custom league.',
+          createdAt: now
+        }
+      ],
+      settings: {
+        ...state.settings,
+        seasonLength: seasonWeeks,
+        matchesPerWeek: state.settings.matchesPerWeek || 5
+      }
+    };
+
+    this.saveState(cleanState);
+    return {
+      success: true,
+      message: 'All seed data has been removed. A clean blank slate has been prepared for your custom players and teams.'
+    };
+  }
+
+  /**
+   * Clears all match scores and completed results, resetting all fixtures to unplayed and quotas to initial state.
+   */
+  public static clearAllScoresAndResults(): { success: boolean; message: string } {
+    const state = this.getState();
+    const now = new Date().toISOString();
+    const activeSeason = state.seasons.find(s => s.status === 'ACTIVE') || state.seasons[0];
+
+    // Reset fixtures
+    state.fixtures.forEach(f => {
+      f.status = f.weekNumber === 1 ? 'OPEN' : 'SCHEDULED';
+      f.winnerTeamId = null;
+      f.matchResult = undefined;
+      f.updatedAt = now;
+    });
+
+    // Reset teams
+    state.teams.forEach(t => {
+      t.quotaLocked = false;
+      t.quotaLockedAt = undefined;
+      t.playoffQuota = undefined;
+      t.finalRegularSeasonQuota = undefined;
+      t.updatedAt = now;
+    });
+
+    // Clear scores, results, playoffs
+    state.playerScores = [];
+    state.teamResults = [];
+    state.playoffs = [];
+    state.quotaHistory = [];
+
+    // Reset season to Week 1
+    if (activeSeason) {
+      activeSeason.currentWeek = 1;
+      activeSeason.currentPhase = 'REGULAR_SEASON';
+      activeSeason.status = 'ACTIVE';
+      activeSeason.championTeamId = undefined;
+      activeSeason.runnerUpTeamId = undefined;
+      activeSeason.updatedAt = now;
+    }
+
+    this.saveState(state);
+    this.logAudit('SCORES_CLEARED', 'DATABASE', undefined, undefined, 'Reset to Week 1 (All scores wiped)', 'Administrator reset match scores and results.');
+    return {
+      success: true,
+      message: 'All match scores, handicaps, and results cleared. Season reset to Week 1 with rosters and fixtures intact.'
+    };
+  }
+
+  /**
+   * Generates or regenerates a schedule given the number of regular season weeks and matches per week.
+   */
+  public static regenerateSchedule(
+    numWeeks: number,
+    matchesPerWeek: number,
+    startDate?: string
+  ): { success: boolean; message: string } {
+    const state = this.getState();
+    const activeSeason = state.seasons.find(s => s.status === 'ACTIVE') || state.seasons[0];
+
+    if (!activeSeason) {
+      return { success: false, message: 'No active season found to generate schedule for.' };
+    }
+
+    if (state.teams.length < 2) {
+      return {
+        success: false,
+        message: `At least 2 registered teams are required to generate fixtures (currently ${state.teams.length} registered).`
+      };
+    }
+
+    const generatedFixtures = ScheduleGenerator.generateRoundRobinSchedule({
+      seasonId: activeSeason.id,
+      teams: state.teams,
+      courses: state.courses,
+      numWeeks,
+      matchesPerWeek,
+      startDate: startDate || activeSeason.startDate
+    });
+
+    // Replace fixtures for this season
+    state.fixtures = [
+      ...state.fixtures.filter(f => f.seasonId !== activeSeason.id),
+      ...generatedFixtures
+    ];
+
+    // Reset scores & playoffs for this season
+    state.playerScores = state.playerScores.filter(s => {
+      const fix = state.fixtures.find(f => f.id === s.fixtureId);
+      return fix && fix.seasonId !== activeSeason.id;
+    });
+    state.teamResults = state.teamResults.filter(r => {
+      const fix = state.fixtures.find(f => f.id === r.fixtureId);
+      return fix && fix.seasonId !== activeSeason.id;
+    });
+    state.playoffs = state.playoffs.filter(p => p.seasonId !== activeSeason.id);
+
+    // Update settings
+    state.settings.seasonLength = numWeeks;
+    state.settings.matchesPerWeek = matchesPerWeek;
+
+    // Update season
+    activeSeason.totalWeeks = numWeeks + (state.teams.length >= 4 ? 2 : 0);
+    activeSeason.currentWeek = 1;
+    activeSeason.currentPhase = 'REGULAR_SEASON';
+    activeSeason.status = 'ACTIVE';
+    activeSeason.championTeamId = undefined;
+    activeSeason.runnerUpTeamId = undefined;
+    activeSeason.updatedAt = new Date().toISOString();
+
+    this.saveState(state);
+    this.logAudit(
+      'SCHEDULE_GENERATED',
+      'SEASON',
+      activeSeason.id,
+      undefined,
+      `${numWeeks} Weeks, ${matchesPerWeek} Matches/Week (${generatedFixtures.length} Total Fixtures)`,
+      'Generated custom round-robin league schedule.'
+    );
+
+    return {
+      success: true,
+      message: `Successfully generated ${numWeeks}-week schedule with ${matchesPerWeek} matches per week (${generatedFixtures.length} total fixtures).`
+    };
+  }
+
+  /**
+   * Creates or initializes a custom league with options to wipe seed data and auto-generate teams.
+   */
+  public static createCustomLeague(options: {
+    societyName: string;
+    numWeeks: number;
+    matchesPerWeek: number;
+    removeSeedData: boolean;
+    autoGenerateTeams?: boolean;
+    startDate?: string;
+  }): { success: boolean; message: string } {
+    const { societyName, numWeeks, matchesPerWeek, removeSeedData, autoGenerateTeams, startDate } = options;
+    const now = new Date().toISOString();
+
+    if (removeSeedData) {
+      this.removeAllSeedData(true);
+    }
+
+    const state = this.getState();
+    state.settings.societyName = societyName || 'Pairs Golf League';
+    state.settings.seasonLength = numWeeks;
+    state.settings.matchesPerWeek = matchesPerWeek;
+
+    const activeSeason = state.seasons[0];
+    if (activeSeason) {
+      activeSeason.name = `${societyName} Championship Season`;
+      activeSeason.totalWeeks = numWeeks + (autoGenerateTeams || state.teams.length >= 4 ? 2 : 0);
+      activeSeason.startDate = startDate || activeSeason.startDate;
+    }
+
+    if (autoGenerateTeams) {
+      // Generate pairs for the requested matches per week (e.g. 5 matches = 10 teams)
+      const teamCount = Math.max(4, matchesPerWeek * 2);
+      const teamNames = [
+        'Eagle Strikers', 'Fairway Aces', 'Birdie Brigade', 'Iron Masters',
+        'Bunker Bandits', 'Putter Pals', 'Green Keepers', 'Rough Riders',
+        'Albatross Club', 'Chip & Run', 'Driver Dynamos', 'Links Legends',
+        'Pin Seekers', 'Wedge Wizards', 'Bogey Busters', 'Par Explorers'
+      ];
+      const playerNames = [
+        { f: 'James', l: 'Anderson', h: 4 }, { f: 'David', l: 'Taylor', h: 8 },
+        { f: 'Michael', l: 'Brown', h: 6 }, { f: 'Robert', l: 'Wilson', h: 11 },
+        { f: 'Christopher', l: 'Miller', h: 9 }, { f: 'Matthew', l: 'Davis', h: 14 },
+        { f: 'Andrew', l: 'Clark', h: 5 }, { f: 'Thomas', l: 'White', h: 12 },
+        { f: 'William', l: 'Harris', h: 7 }, { f: 'Richard', l: 'Martin', h: 15 },
+        { f: 'Charles', l: 'Thompson', h: 8 }, { f: 'Joseph', l: 'Garcia', h: 13 },
+        { f: 'Daniel', l: 'Martinez', h: 10 }, { f: 'Paul', l: 'Robinson', h: 16 },
+        { f: 'Mark', l: 'Walker', h: 6 }, { f: 'Donald', l: 'Young', h: 17 },
+        { f: 'George', l: 'Allen', h: 9 }, { f: 'Kenneth', l: 'King', h: 14 },
+        { f: 'Steven', l: 'Wright', h: 7 }, { f: 'Edward', l: 'Scott', h: 12 },
+        { f: 'Brian', l: 'Torres', h: 5 }, { f: 'Ronald', l: 'Nguyen', h: 18 },
+        { f: 'Anthony', l: 'Hill', h: 11 }, { f: 'Kevin', l: 'Flores', h: 15 }
+      ];
+
+      state.players = [];
+      state.teams = [];
+
+      for (let i = 0; i < teamCount; i++) {
+        const p1Data = playerNames[i * 2 % playerNames.length];
+        const p2Data = playerNames[(i * 2 + 1) % playerNames.length];
+
+        const p1: Player = {
+          id: i * 2 + 1,
+          firstName: p1Data.f,
+          lastName: p1Data.l,
+          displayName: `${p1Data.f} ${p1Data.l}`,
+          handicap: p1Data.h,
+          active: true,
+          createdAt: now,
+          updatedAt: now
+        };
+        const p2: Player = {
+          id: i * 2 + 2,
+          firstName: p2Data.f,
+          lastName: p2Data.l,
+          displayName: `${p2Data.f} ${p2Data.l}`,
+          handicap: p2Data.h,
+          active: true,
+          createdAt: now,
+          updatedAt: now
+        };
+
+        state.players.push(p1, p2);
+
+        const team: Team = {
+          id: i + 1,
+          seasonId: activeSeason.id,
+          teamName: teamNames[i % teamNames.length] || `Team ${i + 1}`,
+          playerAId: p1.id,
+          playerBId: p2.id,
+          currentQuota: 60,
+          quotaLocked: false,
+          active: true,
+          createdAt: now,
+          updatedAt: now
+        };
+
+        state.teams.push(team);
+      }
+
+      this.saveState(state);
+      // Now regenerate schedule
+      this.regenerateSchedule(numWeeks, matchesPerWeek, startDate);
+    } else {
+      this.saveState(state);
+    }
+
+    this.logAudit('LEAGUE_CONFIGURED', 'SETTINGS', undefined, undefined, `${societyName} (${numWeeks} wks, ${matchesPerWeek} matches/wk)`, 'Created custom league configuration.');
+    return {
+      success: true,
+      message: `League "${societyName}" configured with ${numWeeks} weeks and ${matchesPerWeek} matches per week.`
+    };
   }
 
   public static resetToCleanDemo() {

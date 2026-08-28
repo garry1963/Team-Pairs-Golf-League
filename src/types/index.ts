@@ -185,7 +185,8 @@ export interface AuditLog {
 export interface AppSettings {
   societyName: string;
   adminEmail?: string;
-  seasonLength: number; // default 15
+  seasonLength: number; // default 15 regular season weeks
+  matchesPerWeek?: number; // default 5 matches per week
   winPoints: number; // default 2
   drawPoints: number; // default 1
   lossPoints: number; // default 0

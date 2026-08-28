@@ -252,12 +252,19 @@ export const WindowsMenuBar: React.FC<WindowsMenuBarProps> = ({
               className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 text-xs font-medium"
             >
               <Settings className="w-3.5 h-3.5 text-blue-600" />
-              <span>Application Settings</span>
+              <span>Season & League Setup</span>
+            </button>
+            <button
+              onClick={() => handleItemSelect(() => onNavigate('startup'))}
+              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-amber-600 flex items-center gap-2 text-xs font-medium"
+            >
+              <Layers className="w-3.5 h-3.5 text-amber-500" />
+              <span>Startup Screen & Seed Data</span>
             </button>
             {onRunTests && (
               <button
                 onClick={() => handleItemSelect(onRunTests)}
-                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 text-xs font-medium"
+                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 text-xs font-medium border-t border-slate-100"
               >
                 <CheckCircle className="w-3.5 h-3.5 text-green-600" />
                 <span>Run Automated Logic Tests</span>

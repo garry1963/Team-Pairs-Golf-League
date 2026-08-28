@@ -32,14 +32,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onToast,
   onReload
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'database' | 'import' | 'audit' | 'tests'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'season' | 'database' | 'import' | 'audit' | 'tests'>('season');
 
   // General form
   const [societyName, setSocietyName] = useState(settings.societyName);
-  const [adminEmail, setAdminEmail] = useState(settings.adminEmail);
-  const [pointsWin, setPointsWin] = useState(settings.pointsForWin);
-  const [pointsDraw, setPointsDraw] = useState(settings.pointsForDraw);
-  const [pointsLoss, setPointsLoss] = useState(settings.pointsForLoss);
+  const [adminEmail, setAdminEmail] = useState(settings.adminEmail || '');
+  const [seasonWeeks, setSeasonWeeks] = useState(settings.seasonLength || 15);
+  const [matchesPerWeek, setMatchesPerWeek] = useState(settings.matchesPerWeek || 5);
+  const [pointsWin, setPointsWin] = useState(settings.pointsForWin ?? settings.winPoints ?? 2);
+  const [pointsDraw, setPointsDraw] = useState(settings.pointsForDraw ?? settings.drawPoints ?? 1);
+  const [pointsLoss, setPointsLoss] = useState(settings.pointsForLoss ?? settings.lossPoints ?? 0);
+
+  // Modals confirmation
+  const [confirmClearSeedModal, setConfirmClearSeedModal] = useState(false);
+  const [confirmClearScoresModal, setConfirmClearScoresModal] = useState(false);
+  const [confirmResetDemoModal, setConfirmResetDemoModal] = useState(false);
 
   // Test suite state
   const [testResults, setTestResults] = useState<TestRunState | null>(null);
@@ -54,11 +61,51 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     DatabaseEngine.updateSettings({
       societyName: societyName.trim(),
       adminEmail: adminEmail.trim(),
+      seasonLength: seasonWeeks,
+      matchesPerWeek: matchesPerWeek,
+      winPoints: pointsWin,
+      drawPoints: pointsDraw,
+      lossPoints: pointsLoss,
       pointsForWin: pointsWin,
       pointsForDraw: pointsDraw,
       pointsForLoss: pointsLoss
     });
     onToast('success', 'Settings Saved', 'Application preferences updated successfully.');
+  };
+
+  const handleRegenerateSchedule = () => {
+    const res = DatabaseEngine.regenerateSchedule(seasonWeeks, matchesPerWeek);
+    if (res.success) {
+      onToast('success', 'Schedule Generated', res.message);
+      onReload();
+    } else {
+      onToast('error', 'Generation Error', res.message);
+    }
+  };
+
+  const handleRemoveAllSeedData = () => {
+    const res = DatabaseEngine.removeAllSeedData(true);
+    if (res.success) {
+      onToast('success', 'Seed Data Removed', res.message);
+      setConfirmClearSeedModal(false);
+      onReload();
+    }
+  };
+
+  const handleClearScores = () => {
+    const res = DatabaseEngine.clearAllScoresAndResults();
+    if (res.success) {
+      onToast('success', 'Scores Cleared', res.message);
+      setConfirmClearScoresModal(false);
+      onReload();
+    }
+  };
+
+  const handleResetDemo = () => {
+    DatabaseEngine.resetToCleanDemo();
+    onToast('success', 'Demo League Loaded', 'Restored default 10 teams, 20 players, and 15-week schedule.');
+    setConfirmResetDemoModal(false);
+    onReload();
   };
 
   const handleBackup = () => {
@@ -122,36 +169,46 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </h1>
           </div>
           <p className="text-xs text-slate-500">
-            Configure society parameters, database backup/restore, audit logs, and automated engine validation
+            Configure season weeks, matches per week, database seed removal, scoring points, and engine diagnostics
           </p>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto custom-scrollbar">
+        <button
+          onClick={() => setActiveTab('season')}
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+            activeTab === 'season'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          Season & Schedule Setup
+        </button>
         <button
           onClick={() => setActiveTab('general')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'general'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          General Rules
+          General & Points Rules
         </button>
         <button
           onClick={() => setActiveTab('database')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'database'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          Database Backup & Restore
+          Database & Seed Data Management
         </button>
         <button
           onClick={() => setActiveTab('import')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'import'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -161,7 +218,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('audit')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'audit'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -171,7 +228,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('tests')}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 ${
+          className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center space-x-1.5 ${
             activeTab === 'tests'
               ? 'bg-amber-600 text-white shadow-xs'
               : 'text-amber-700 hover:bg-amber-50'
@@ -182,10 +239,119 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </button>
       </div>
 
+      {/* Tab: Season & Schedule Setup */}
+      {activeTab === 'season' && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <div>
+            <h3 className="font-bold text-slate-900 text-base">Season Length & Weekly Matches Configuration</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Customize the total number of regular season weeks and the scheduled matches per week for your league.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Number of Weeks Setting */}
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-900 font-bold text-sm">Number of Regular Season Weeks</label>
+                <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {seasonWeeks} Weeks
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Controls the duration of the regular season before the playoff quota lock and knockout brackets trigger.
+              </p>
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min={1}
+                  max={30}
+                  value={seasonWeeks}
+                  onChange={e => setSeasonWeeks(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={seasonWeeks}
+                    onChange={e => setSeasonWeeks(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
+                    className="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-xs text-slate-500">Regular season rounds (e.g. 10, 15, 20)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Matches Per Week Setting */}
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-900 font-bold text-sm">Number of Matches Per Week</label>
+                <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {matchesPerWeek} Matches/Wk
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                The number of paired matches scheduled per week across the participating teams and courses.
+              </p>
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  value={matchesPerWeek}
+                  onChange={e => setMatchesPerWeek(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={matchesPerWeek}
+                    onChange={e => setMatchesPerWeek(Math.max(1, Math.min(12, Number(e.target.value) || 1)))}
+                    className="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-xs text-slate-500">Fixtures scheduled per round (default: 5)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Schedule Action Banner */}
+          <div className="p-5 rounded-xl bg-blue-50 border border-blue-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h4 className="font-bold text-blue-950 text-sm">Regenerate League Schedule with New Parameters</h4>
+              <p className="text-xs text-blue-800 leading-relaxed">
+                Calculates a balanced round-robin fixture list for {seasonWeeks} weeks with {matchesPerWeek} matches per week ({seasonWeeks * matchesPerWeek} total matches) based on your currently registered teams.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleSaveSettings}
+                className="px-4 py-2 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300 shadow-2xs transition"
+              >
+                Save Settings Only
+              </button>
+              <button
+                type="button"
+                onClick={handleRegenerateSchedule}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center space-x-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Apply & Regenerate Schedule</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab 1: General Settings */}
       {activeTab === 'general' && (
         <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
-          <h3 className="font-bold text-slate-900 text-base">Society Configuration</h3>
+          <h3 className="font-bold text-slate-900 text-base">Society Configuration & Points Allocation</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
@@ -255,65 +421,223 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </form>
       )}
 
-      {/* Tab 2: Database Backup & Restore */}
+      {/* Tab 2: Database Backup & Seed Data Management */}
       {activeTab === 'database' && (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
           <div>
-            <h3 className="font-bold text-slate-900 text-base">Persistent Database Management</h3>
+            <h3 className="font-bold text-slate-900 text-base">Persistent Database & Seed Data Management</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Create complete offline backup snapshots or restore an existing JSON export.
+              Remove seed demo data for clean real-league entry, reset match scores, or export/restore backup snapshots.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-5 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Download className="w-5 h-5 text-blue-600" />
-                <h4 className="font-bold text-slate-900 text-sm">Export Full Backup</h4>
+          {/* Seed Data and Reset Actions */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Card 1: Remove All Seed Data */}
+            <div className="p-5 rounded-xl bg-rose-50 border border-rose-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 text-rose-700 font-bold text-sm">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span>Remove All Seed Data</span>
+                </div>
+                <p className="text-[11px] text-rose-800 leading-relaxed">
+                  Completely wipes all demo players, teams, fixtures, and scores. Produces a 100% clean blank slate so you can enter your real society roster.
+                </p>
               </div>
-              <p className="text-xs text-slate-500">
-                Download all seasons, teams, players, scores, courses, and audit logs into a single JSON file.
-              </p>
               <button
-                onClick={handleBackup}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center space-x-2"
+                type="button"
+                onClick={() => setConfirmClearSeedModal(true)}
+                className="w-full px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-2xs transition"
               >
-                <Download className="w-4 h-4" />
-                <span>Export Backup (.json)</span>
+                Remove All Seed Data
               </button>
             </div>
 
-            <div className="p-5 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Upload className="w-5 h-5 text-amber-600" />
-                <h4 className="font-bold text-slate-900 text-sm">Restore from Backup</h4>
+            {/* Card 2: Clear Scores & Results */}
+            <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 text-amber-800 font-bold text-sm">
+                  <RefreshCw className="w-5 h-5" />
+                  <span>Clear Scores & Reset Week 1</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Keeps all existing registered teams and player rosters, but clears all entered scores and resets the season back to Week 1.
+                </p>
               </div>
-              <p className="text-xs text-slate-500">
-                Import a previously exported JSON backup file to overwrite or restore league data.
-              </p>
-              <label className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 cursor-pointer shadow-xs transition">
-                <Upload className="w-4 h-4 text-blue-600" />
-                <span>Select JSON File</span>
-                <input type="file" accept=".json" onChange={handleRestoreFile} className="hidden" />
-              </label>
+              <button
+                type="button"
+                onClick={() => setConfirmClearScoresModal(true)}
+                className="w-full px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs transition"
+              >
+                Clear Scores (Keep Teams)
+              </button>
+            </div>
+
+            {/* Card 3: Re-seed Demo League */}
+            <div className="p-5 rounded-xl bg-blue-50 border border-blue-200 space-y-3 flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 text-blue-700 font-bold text-sm">
+                  <Database className="w-5 h-5" />
+                  <span>Re-Seed Demo League</span>
+                </div>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Loads the default demo dataset with 10 pairs teams, 20 players, course setup, and active Week 8 schedule.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmResetDemoModal(true)}
+                className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition"
+              >
+                Load Demo Dataset
+              </button>
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-between">
-            <div>
-              <h4 className="font-bold text-rose-900 text-xs">Reset All Data to Demo Seeds</h4>
-              <p className="text-[11px] text-rose-700 mt-0.5">Re-seed 10 teams, 20 players, and 15-week fixtures.</p>
+          {/* Backup & Restore JSON */}
+          <div className="border-t border-slate-100 pt-6">
+            <h4 className="font-bold text-slate-900 text-sm mb-3">Offline Backup Snapshot & Restore</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Download className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Export Full Backup</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Download all seasons, teams, players, scores, courses, and audit logs into a single JSON file.
+                </p>
+                <button
+                  onClick={handleBackup}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center space-x-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export Backup (.json)</span>
+                </button>
+              </div>
+
+              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Upload className="w-5 h-5 text-amber-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Restore from Backup</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Import a previously exported JSON backup file to overwrite or restore league data.
+                </p>
+                <label className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 cursor-pointer shadow-xs transition">
+                  <Upload className="w-4 h-4 text-blue-600" />
+                  <span>Select JSON File</span>
+                  <input type="file" accept=".json" onChange={handleRestoreFile} className="hidden" />
+                </label>
+              </div>
             </div>
-            <button
-              onClick={() => {
-                DatabaseEngine.resetDatabase();
-                onToast('warning', 'Database Reset', 'Clean seed dataset loaded.');
-                onReload();
-              }}
-              className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition shadow-xs"
-            >
-              Reset Database
-            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Remove All Seed Data */}
+      {confirmClearSeedModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Remove All Seed Data?</h3>
+                <span className="text-xs text-slate-500">This action will wipe all demo players and teams</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This will completely remove all 10 demo teams, 20 players, simulated fixture schedules, and entered match scores. You will have a clean blank league ready to register your actual players and teams.
+            </p>
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmClearSeedModal(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveAllSeedData}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Confirm Wipe Seed Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Clear Scores */}
+      {confirmClearScoresModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-amber-600">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Reset to Week 1 (Clear Scores)?</h3>
+                <span className="text-xs text-slate-500">Teams and rosters will remain preserved</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              All entered match scores, handicaps, and standings will be reset to Week 1. Your team pairings and player profiles will stay saved.
+            </p>
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmClearScoresModal(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearScores}
+                className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Reset Scores
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Re-seed Demo */}
+      {confirmResetDemoModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-blue-600">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Load Default Demo League?</h3>
+                <span className="text-xs text-slate-500">Restores standard 10 teams and 15 weeks</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This will restore the complete demo dataset with 10 pairs teams, 20 players, golf courses, and 7 completed weeks.
+            </p>
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmResetDemoModal(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDemo}
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Load Demo
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -385,11 +709,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 {auditLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {new Date(log.createdAt || (log as any).timestamp).toLocaleString()}
                     </td>
                     <td className="py-2.5 px-3 font-semibold text-blue-700">{log.action}</td>
-                    <td className="py-2.5 px-3 text-slate-700">{log.entityType} #{log.entityId}</td>
-                    <td className="py-2.5 px-4 text-slate-900">{log.details}</td>
+                    <td className="py-2.5 px-3 text-slate-700">{log.entityType} {log.entityId ? `#${log.entityId}` : ''}</td>
+                    <td className="py-2.5 px-4 text-slate-900">{log.reason || log.newValue || (log as any).details || '--'}</td>
                     <td className="py-2.5 px-3 text-slate-500">{log.userId}</td>
                   </tr>
                 ))}
@@ -485,3 +809,4 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     </div>
   );
 };
+
