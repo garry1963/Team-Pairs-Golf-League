@@ -1,0 +1,8 @@
+{
+  "name": "Team Pairs Golf League",
+  "description": "Professional Windows desktop management system for Pairs Golf Leagues with automated quota, scoring, playoffs, and reporting engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
