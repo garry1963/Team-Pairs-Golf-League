@@ -160,36 +160,44 @@ export class DatabaseEngine {
       teamB.quotaLocked && teamB.playoffQuota ? teamB.playoffQuota : teamB.currentQuota
     );
 
-    // Run official Tiebreaker Service
-    const tiebreaker = TiebreakerService.resolveFixtureMatch(
-      resA.weeklyNetResult,
-      resA.lowestGrossScore,
-      resA.secondGrossScore,
-      resB.weeklyNetResult,
-      resB.lowestGrossScore,
-      resB.secondGrossScore
-    );
-
     let winnerTeamId: number | null = null;
     let matchResultA: 'WIN' | 'LOSS' | 'DRAW' = 'DRAW';
     let matchResultB: 'WIN' | 'LOSS' | 'DRAW' = 'DRAW';
     let fixtureMatchResult: 'TEAM_A_WIN' | 'TEAM_B_WIN' | 'DRAW' = 'DRAW';
 
-    if (tiebreaker.winner === 'TEAM_A') {
+    if (resA.weeklyNetResult > resB.weeklyNetResult) {
       winnerTeamId = teamA.id;
       matchResultA = 'WIN';
       matchResultB = 'LOSS';
       fixtureMatchResult = 'TEAM_A_WIN';
-    } else if (tiebreaker.winner === 'TEAM_B') {
+    } else if (resB.weeklyNetResult > resA.weeklyNetResult) {
       winnerTeamId = teamB.id;
       matchResultA = 'LOSS';
       matchResultB = 'WIN';
       fixtureMatchResult = 'TEAM_B_WIN';
     } else {
-      winnerTeamId = null;
-      matchResultA = 'DRAW';
-      matchResultB = 'DRAW';
-      fixtureMatchResult = 'DRAW';
+      // Tied Net Result
+      if (fixture.isPlayoff) {
+        // For playoff progression only, use lowest gross as knockout decider
+        const aLow = resA.lowestGrossScore ?? 999;
+        const bLow = resB.lowestGrossScore ?? 999;
+        if (aLow < bLow) {
+          winnerTeamId = teamA.id;
+          matchResultA = 'WIN';
+          matchResultB = 'LOSS';
+          fixtureMatchResult = 'TEAM_A_WIN';
+        } else {
+          winnerTeamId = teamB.id;
+          matchResultA = 'LOSS';
+          matchResultB = 'WIN';
+          fixtureMatchResult = 'TEAM_B_WIN';
+        }
+      } else {
+        winnerTeamId = null;
+        matchResultA = 'DRAW';
+        matchResultB = 'DRAW';
+        fixtureMatchResult = 'DRAW';
+      }
     }
 
     const now = new Date().toISOString();
@@ -273,18 +281,21 @@ export class DatabaseEngine {
     }
 
     this.saveState(state);
+    const netSummaryA = `${teamA.teamName}: ${resA.weeklyNetResult >= 0 ? `+${resA.weeklyNetResult}` : resA.weeklyNetResult} Net (${resA.weeklyNetResult >= 0 ? 'added to' : 'deducted from'} season running points)`;
+    const netSummaryB = `${teamB.teamName}: ${resB.weeklyNetResult >= 0 ? `+${resB.weeklyNetResult}` : resB.weeklyNetResult} Net (${resB.weeklyNetResult >= 0 ? 'added to' : 'deducted from'} season running points)`;
+
     this.logAudit(
       'SCORE_ENTERED',
       'FIXTURE',
       fixtureId,
       undefined,
       `${teamA.teamName} (${resA.weeklyNetResult >= 0 ? `+${resA.weeklyNetResult}` : resA.weeklyNetResult}) vs ${teamB.teamName} (${resB.weeklyNetResult >= 0 ? `+${resB.weeklyNetResult}` : resB.weeklyNetResult})`,
-      userReason || `Scores saved for Week ${fixture.weekNumber}. Result: ${tiebreaker.explanation}`
+      userReason || `Scores saved for Week ${fixture.weekNumber}. ${netSummaryA}. ${netSummaryB}.`
     );
 
     return {
       success: true,
-      message: `Scores recorded successfully. ${teamA.teamName}: ${resA.weeklyNetResult >= 0 ? `+${resA.weeklyNetResult}` : resA.weeklyNetResult} Net, ${teamB.teamName}: ${resB.weeklyNetResult >= 0 ? `+${resB.weeklyNetResult}` : resB.weeklyNetResult} Net. ${tiebreaker.explanation}`
+      message: `Scores recorded successfully. ${netSummaryA}. ${netSummaryB}.`
     };
   }
 

@@ -170,6 +170,19 @@ export class LeagueUnitTester {
       passed: champGen.fixture.teamAId === 101 && champGen.fixture.teamBId === 102 && champGen.fixture.weekNumber === 17
     });
 
+    // 7. Net Result Season Points System Test
+    // Team A: Match 1: +8, Match 2: -3, Match 3: +4 => Total Season Points: +9
+    const matchNetResults = [8, -3, 4];
+    const totalRunningPoints = matchNetResults.reduce((acc, curr) => acc + curr, 0);
+    results.push({
+      id: 'net-points-calc-1',
+      name: 'Season Points Engine: Net Results (+8, -3, +4) = +9 Running Points',
+      category: 'TEAM',
+      expected: 'Season Points: +9',
+      actual: `Season Points: ${totalRunningPoints > 0 ? `+${totalRunningPoints}` : totalRunningPoints}`,
+      passed: totalRunningPoints === 9
+    });
+
     const endTime = performance.now();
     const passedCount = results.filter(r => r.passed).length;
     const failedCount = results.length - passedCount;

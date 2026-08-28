@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   Trophy, Flag, CheckCircle2, AlertTriangle, Clock,
-  ArrowLeft, Save, Sparkles, Lock, ShieldAlert, Ban, RefreshCw
+  ArrowLeft, Save, Sparkles, Lock, ShieldAlert, Ban, RefreshCw, TrendingUp
 } from 'lucide-react';
 import { Fixture, Team, Player, Course, PlayerScore, TeamResult, Season } from '../../types';
 import { ScoringService } from '../../engine/scoring';
-import { TiebreakerService } from '../../engine/tiebreaker';
 import { DatabaseEngine } from '../../storage/db';
 import { DeadlineService } from '../../engine/deadline';
 
@@ -132,15 +131,6 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
     b2Dnf,
     course.par,
     quotaB
-  );
-
-  const tiebreaker = TiebreakerService.resolveFixtureMatch(
-    teamResA.weeklyNetResult,
-    teamResA.lowestGrossScore,
-    teamResA.secondGrossScore,
-    teamResB.weeklyNetResult,
-    teamResB.lowestGrossScore,
-    teamResB.secondGrossScore
   );
 
   const isDeadlinePassed = DeadlineService.isDeadlineExpired(fixture.deadline);
@@ -571,18 +561,32 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
         </div>
       </div>
 
-      {/* Live Match Outcome & Tiebreaker Resolution Banner */}
+      {/* Live Match Season Points Net Result Impact Banner */}
       <div className="p-5 bg-blue-50/80 rounded-xl border border-blue-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex items-center space-x-2">
-            <Trophy className="w-5 h-5 text-amber-500" />
+            <TrendingUp className="w-5 h-5 text-blue-600" />
             <h3 className="font-bold text-slate-900 text-sm">
-              Live Projected Match Outcome
+              Season Points Impact (Running Net Result Total)
             </h3>
           </div>
-          <p className="text-xs text-blue-950 font-medium">
-            {tiebreaker.explanation}
-          </p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-medium text-slate-800">
+              <strong>{teamA.teamName}:</strong>{' '}
+              <span className={`font-mono font-bold ${teamResA.weeklyNetResult >= 0 ? 'text-green-700' : 'text-rose-700'}`}>
+                {teamResA.weeklyNetResult >= 0 ? `+${teamResA.weeklyNetResult}` : teamResA.weeklyNetResult} pts
+              </span>{' '}
+              ({teamResA.weeklyNetResult >= 0 ? 'added to season total' : 'deducted from season total'})
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="font-medium text-slate-800">
+              <strong>{teamB.teamName}:</strong>{' '}
+              <span className={`font-mono font-bold ${teamResB.weeklyNetResult >= 0 ? 'text-green-700' : 'text-rose-700'}`}>
+                {teamResB.weeklyNetResult >= 0 ? `+${teamResB.weeklyNetResult}` : teamResB.weeklyNetResult} pts
+              </span>{' '}
+              ({teamResB.weeklyNetResult >= 0 ? 'added to season total' : 'deducted from season total'})
+            </span>
+          </div>
         </div>
 
         {/* Action Buttons */}

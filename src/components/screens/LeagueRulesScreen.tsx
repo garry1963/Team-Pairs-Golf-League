@@ -55,30 +55,29 @@ export const LeagueRulesScreen: React.FC = () => {
           </p>
         </div>
 
-        {/* Rule 3: Team Quota & Net Result */}
+        {/* Rule 3: Team Quota & Net Result Points System */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-2">
           <div className="flex items-center space-x-2 text-blue-700 font-bold text-sm">
             <Shield className="w-4 h-4" />
-            <span>3. Team Points, Quota & Weekly Net Result</span>
+            <span>3. Team Points, Quota & Season Points System</span>
           </div>
           <ul className="list-disc list-inside space-y-1.5 leading-relaxed text-slate-600 pl-1">
             <li><strong className="text-slate-900">Team Points:</strong> The sum of Player 1 League Points and Player 2 League Points.</li>
-            <li><strong className="text-slate-900">Weekly Net Result:</strong> Calculated as <code className="bg-slate-100 px-1.5 py-0.5 rounded text-blue-800 font-bold border border-slate-200">Team Points Total - Current Team Quota</code>. (e.g. 68 Team Points minus 60 Quota = +8 Net Result).</li>
-            <li><strong className="text-slate-900">Match Outcome:</strong> The team with the superior (higher) Weekly Net Result wins the match (2 Season Points for Win, 1 for Draw, 0 for Loss).</li>
+            <li><strong className="text-slate-900">Weekly Net Result:</strong> Calculated as <code className="bg-slate-100 px-1.5 py-0.5 rounded text-blue-800 font-bold border border-slate-200">Team Points Total - Current Team Quota</code> (e.g. 68 Team Points minus 60 Quota = +8 Net Result).</li>
+            <li><strong className="text-slate-900">Cumulative Season Points:</strong> Each team's Season Points are their cumulative Match Net Result value. A positive Net Result is added to the team's running season points total, while a negative Net Result is subtracted from it.</li>
           </ul>
         </div>
 
-        {/* Rule 4: Tiebreaker Protocol */}
+        {/* Rule 4: Standings Order & Quota Adjustments */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-2">
           <div className="flex items-center space-x-2 text-blue-700 font-bold text-sm">
             <CheckCircle2 className="w-4 h-4" />
-            <span>4. Authoritative Tiebreaker Protocol</span>
+            <span>4. League Standings Hierarchy</span>
           </div>
           <ol className="list-decimal list-inside space-y-1.5 leading-relaxed text-slate-600 pl-1">
-            <li><strong className="text-slate-900">Net Result Comparison:</strong> Highest Weekly Net Result wins.</li>
-            <li><strong className="text-slate-900">Lowest Individual Gross Score:</strong> If Net Results are tied, the team whose player carded the lowest single Gross Score wins.</li>
-            <li><strong className="text-slate-900">Second-Lowest Gross Score:</strong> If lowest gross is identical, the team with the lower second gross score wins.</li>
-            <li><strong className="text-slate-900">Match Draw:</strong> If all scores and tiebreakers are identical, a Draw is awarded (1 Season Point each).</li>
+            <li><strong className="text-slate-900">Season Points:</strong> Standings rank teams primarily by total Season Points (cumulative Net Result).</li>
+            <li><strong className="text-slate-900">Total Team Points:</strong> If Season Points are tied, teams are separated by total aggregate Team Points scored across the season.</li>
+            <li><strong className="text-slate-900">Alphabetical:</strong> If still tied, alphabetical order by team name applies.</li>
           </ol>
         </div>
 

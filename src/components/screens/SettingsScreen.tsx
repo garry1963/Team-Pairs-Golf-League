@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Settings as SettingsIcon, Database, Save, Upload, Download,
-  CheckCircle2, XCircle, Play, Shield, RefreshCw, AlertTriangle, FileSpreadsheet, Eye
+  CheckCircle2, XCircle, Play, Shield, ShieldCheck, RefreshCw, AlertTriangle, FileSpreadsheet, Eye
 } from 'lucide-react';
 import { AppSettings, AuditLog, Season } from '../../types';
 import { DatabaseEngine } from '../../storage/db';
@@ -377,34 +377,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
 
           <div className="border-t border-slate-100 pt-4 space-y-3">
-            <h4 className="font-bold text-slate-900 text-sm">League Match Points Allocation</h4>
-            <div className="grid grid-cols-3 gap-4 text-xs">
-              <div>
-                <label className="block text-slate-600 mb-1 font-medium">Points for Win</label>
-                <input
-                  type="number"
-                  value={pointsWin}
-                  onChange={e => setPointsWin(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-blue-700 font-bold font-mono text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                />
+            <h4 className="font-bold text-slate-900 text-sm">Official League Season Points System</h4>
+            <div className="p-4 rounded-xl bg-blue-50/80 border border-blue-200 text-xs space-y-2">
+              <div className="flex items-center space-x-2 text-blue-900 font-bold">
+                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                <span>Cumulative Match Net Result Points</span>
               </div>
-              <div>
-                <label className="block text-slate-600 mb-1 font-medium">Points for Draw</label>
-                <input
-                  type="number"
-                  value={pointsDraw}
-                  onChange={e => setPointsDraw(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-amber-700 font-bold font-mono text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 mb-1 font-medium">Points for Loss</label>
-                <input
-                  type="number"
-                  value={pointsLoss}
-                  onChange={e => setPointsLoss(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-rose-700 font-bold font-mono text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                />
+              <p className="text-slate-700 leading-relaxed">
+                Each team's League Season Points total is the cumulative sum of their weekly match Net Result values. Positive net results are <strong>added</strong> to the running points total, while negative net results are <strong>deducted</strong>.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="p-2.5 bg-white rounded-lg border border-blue-100">
+                  <span className="text-[11px] font-bold text-green-700 block">+ Net Result (e.g. +8 pts)</span>
+                  <span className="text-[10px] text-slate-500">Adds directly to team's running season points</span>
+                </div>
+                <div className="p-2.5 bg-white rounded-lg border border-blue-100">
+                  <span className="text-[11px] font-bold text-rose-700 block">- Net Result (e.g. -6 pts)</span>
+                  <span className="text-[10px] text-slate-500">Deducts directly from team's running season points</span>
+                </div>
               </div>
             </div>
           </div>

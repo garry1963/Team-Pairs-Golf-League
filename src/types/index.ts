@@ -160,7 +160,7 @@ export interface StandingsRow {
   wins: number;
   draws: number;
   losses: number;
-  seasonPoints: number; // 2 pts for Win, 1 for Draw
+  seasonPoints: number; // Cumulative running match Net Result total (+/-)
   totalTeamPoints: number;
   totalNetResult: number;
   avgNetResult: number;
