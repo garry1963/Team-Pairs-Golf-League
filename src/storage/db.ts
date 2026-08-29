@@ -8,8 +8,8 @@ import { PlayoffService } from '../engine/playoffs';
 import { StandingsService } from '../engine/standings';
 import { ScheduleGenerator } from '../engine/scheduleGenerator';
 
-const STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_DB_V1';
-const BACKUP_STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_BACKUPS_V1';
+const STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_DB_V2';
+const BACKUP_STORAGE_KEY = 'PAIRS_GOLF_LEAGUE_BACKUPS_V2';
 
 export interface DatabaseState {
   version: string;
@@ -113,6 +113,122 @@ export class DatabaseEngine {
       state.auditLogs = state.auditLogs.slice(0, 500);
     }
     this.saveState(state);
+  }
+
+  // --- WEEKLY ALL-TEAMS SCORE ENTRY TRANSACTION ---
+  public static saveTeamWeeklyScore(
+    fixtureId: number,
+    teamId: number,
+    scoresInput: {
+      playerA1Gross: number | null;
+      playerA1Dnf: boolean;
+      playerA2Gross: number | null;
+      playerA2Dnf: boolean;
+    },
+    userReason?: string
+  ): { success: boolean; message: string } {
+    const state = this.getState();
+    const fixture = state.fixtures.find(f => f.id === fixtureId);
+    if (!fixture) return { success: false, message: 'Fixture not found' };
+
+    const course = state.courses.find(c => c.id === fixture.courseId) || state.courses[0];
+    const team = state.teams.find(t => t.id === teamId);
+    if (!team) return { success: false, message: 'Team not found' };
+
+    const quota = team.quotaLocked && team.playoffQuota ? team.playoffQuota : team.currentQuota;
+
+    // Calculate Team Result
+    const res = ScoringService.calculateTeamResult(
+      scoresInput.playerA1Gross,
+      scoresInput.playerA1Dnf,
+      scoresInput.playerA2Gross,
+      scoresInput.playerA2Dnf,
+      course.par,
+      quota
+    );
+
+    const now = new Date().toISOString();
+
+    // 1. Update/insert player scores for this team in this fixture
+    // Remove existing player scores for this team & fixture
+    state.playerScores = state.playerScores.filter(ps => !(ps.fixtureId === fixtureId && ps.teamId === teamId));
+
+    const scoreItems = [
+      { pId: team.playerAId, gross: scoresInput.playerA1Gross, dnf: scoresInput.playerA1Dnf, pts: res.playerAPoints },
+      { pId: team.playerBId, gross: scoresInput.playerA2Gross, dnf: scoresInput.playerA2Dnf, pts: res.playerBPoints }
+    ];
+
+    scoreItems.forEach(item => {
+      const rel = ScoringService.calculateRelativeToPar(item.gross, course.par);
+      state.playerScores.push({
+        id: Date.now() + item.pId + Math.floor(Math.random() * 1000),
+        fixtureId,
+        playerId: item.pId,
+        teamId: team.id,
+        grossScore: item.dnf ? null : item.gross,
+        coursePar: course.par,
+        relativeToPar: item.dnf ? null : rel,
+        leaguePoints: item.pts,
+        scoreStatus: item.dnf ? 'DNF' : 'VALID',
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now
+      });
+    });
+
+    // 2. Update/insert Team Result for this team & fixture
+    state.teamResults = state.teamResults.filter(tr => !(tr.fixtureId === fixtureId && tr.teamId === teamId));
+    
+    let matchResult: 'WIN' | 'LOSS' | 'DRAW' = 'DRAW';
+    if (res.weeklyNetResult > 0) matchResult = 'WIN';
+    else if (res.weeklyNetResult < 0) matchResult = 'LOSS';
+
+    state.teamResults.push({
+      id: Date.now() + Math.floor(Math.random() * 1000) + 1,
+      fixtureId,
+      teamId: team.id,
+      playerAPoints: res.playerAPoints,
+      playerBPoints: res.playerBPoints,
+      teamPoints: res.teamPoints,
+      teamQuota: res.teamQuota,
+      weeklyNetResult: res.weeklyNetResult,
+      lowestGrossScore: res.lowestGrossScore,
+      secondGrossScore: res.secondGrossScore,
+      matchResult,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // 3. Update Fixture Status based on total season teams submitted
+    const seasonTeams = state.teams.filter(t => t.seasonId === fixture.seasonId && t.active);
+    const submittedCount = state.teamResults.filter(tr => tr.fixtureId === fixtureId).length;
+
+    if (submittedCount >= seasonTeams.length && seasonTeams.length > 0) {
+      fixture.status = 'COMPLETED';
+    } else if (submittedCount > 0) {
+      fixture.status = 'IN_PROGRESS';
+    } else {
+      fixture.status = 'OPEN';
+    }
+    fixture.updatedAt = now;
+
+    this.saveState(state);
+
+    const netSummary = `${team.teamName}: ${res.weeklyNetResult >= 0 ? `+${res.weeklyNetResult}` : res.weeklyNetResult} Net Result (${res.weeklyNetResult >= 0 ? 'added to' : 'deducted from'} season running points)`;
+
+    this.logAudit(
+      'SCORE_ENTERED',
+      'FIXTURE',
+      fixtureId,
+      undefined,
+      `${team.teamName} (${res.weeklyNetResult >= 0 ? `+${res.weeklyNetResult}` : res.weeklyNetResult} Net)`,
+      userReason || `Score recorded for ${team.teamName} in Week ${fixture.weekNumber}. ${netSummary}.`
+    );
+
+    return {
+      success: true,
+      message: `Score recorded for ${team.teamName}. ${netSummary}.`
+    };
   }
 
   // --- SCORE ENTRY & CORRECTION TRANSACTION ---
@@ -779,41 +895,6 @@ export class DatabaseEngine {
       }
     ];
 
-    // Generate 15 Weeks Round-Robin Schedule
-    // 10 teams -> 9 round-robin rounds, then rounds 10-15 repeat pairings with reversed home/away
-    const roundRobinPairings = [
-      // Week 1
-      [[1, 10], [2, 9], [3, 8], [4, 7], [5, 6]],
-      // Week 2
-      [[1, 9], [10, 8], [2, 7], [3, 6], [4, 5]],
-      // Week 3
-      [[1, 8], [9, 7], [10, 6], [2, 5], [3, 4]],
-      // Week 4
-      [[1, 7], [8, 6], [9, 5], [10, 4], [2, 3]],
-      // Week 5
-      [[1, 6], [7, 5], [8, 4], [9, 3], [10, 2]],
-      // Week 6
-      [[1, 5], [6, 4], [7, 3], [8, 2], [9, 10]],
-      // Week 7
-      [[1, 4], [5, 3], [6, 2], [7, 10], [8, 9]],
-      // Week 8 (Current Week)
-      [[1, 3], [4, 2], [5, 10], [6, 9], [7, 8]],
-      // Week 9
-      [[1, 2], [3, 10], [4, 9], [5, 8], [6, 7]],
-      // Week 10
-      [[10, 1], [9, 2], [8, 3], [7, 4], [6, 5]],
-      // Week 11
-      [[9, 1], [8, 10], [7, 2], [6, 3], [5, 4]],
-      // Week 12
-      [[8, 1], [7, 9], [6, 10], [5, 2], [4, 3]],
-      // Week 13
-      [[7, 1], [6, 8], [5, 9], [4, 10], [3, 2]],
-      // Week 14
-      [[6, 1], [5, 7], [4, 8], [3, 9], [2, 10]],
-      // Week 15 (Final Regular Season)
-      [[5, 1], [4, 6], [3, 7], [2, 8], [10, 9]]
-    ];
-
     const fixtures: Fixture[] = [];
     const playerScores: PlayerScore[] = [];
     const teamResults: TeamResult[] = [];
@@ -821,79 +902,50 @@ export class DatabaseEngine {
     let scoreIdCounter = 1;
     let teamResultIdCounter = 1;
 
-    // Generate fixtures and simulated completed scores for Weeks 1 to 7
+    // Generate 15 Weekly Fixtures (1 per week, all teams play every weekly fixture)
     const baseDate = new Date(2026, 3, 3); // April 3, 2026
 
-    roundRobinPairings.forEach((weekMatches, weekIdx) => {
-      const weekNumber = weekIdx + 1;
+    for (let weekNumber = 1; weekNumber <= 15; weekNumber++) {
+      const weekIdx = weekNumber - 1;
       const fixtureDateObj = new Date(baseDate.getTime() + weekIdx * 7 * 24 * 60 * 60 * 1000);
       const deadlineObj = new Date(fixtureDateObj.getTime() + 2 * 24 * 60 * 60 * 1000 + 18 * 60 * 60 * 1000); // Sunday 18:00
       const isCompletedWeek = weekNumber <= 7;
-      const isOpenWeek = weekNumber === 8;
-      const course = courses[(weekNumber - 1) % courses.length];
+      const isCurrentWeek = weekNumber === 8;
+      const course = courses[weekIdx % courses.length];
+      const fId = fixtureIdCounter++;
 
-      weekMatches.forEach(([tAId, tBId], matchIdx) => {
-        const fId = fixtureIdCounter++;
-        const tA = teams.find(t => t.id === tAId)!;
-        const tB = teams.find(t => t.id === tBId)!;
+      const fixture: Fixture = {
+        id: fId,
+        seasonId,
+        weekNumber,
+        phase: 'REGULAR_SEASON',
+        fixtureDate: fixtureDateObj.toISOString().split('T')[0],
+        deadline: deadlineObj.toISOString(),
+        courseId: course.id,
+        status: isCompletedWeek ? 'COMPLETED' : (isCurrentWeek ? 'IN_PROGRESS' : 'SCHEDULED'),
+        isPlayoff: false,
+        notes: `Week ${weekNumber} League Fixture — All 10 Teams Field Round`,
+        createdAt: now,
+        updatedAt: now
+      };
 
-        const fixture: Fixture = {
-          id: fId,
-          seasonId,
-          weekNumber,
-          phase: 'REGULAR_SEASON',
-          fixtureDate: fixtureDateObj.toISOString().split('T')[0],
-          deadline: deadlineObj.toISOString(),
-          courseId: course.id,
-          teamAId: tA.id,
-          teamBId: tB.id,
-          status: isCompletedWeek ? 'COMPLETED' : (isOpenWeek ? 'OPEN' : 'SCHEDULED'),
-          winnerTeamId: null,
-          matchResult: undefined,
-          isPlayoff: false,
-          notes: `Week ${weekNumber} Regular Season Match ${matchIdx + 1}`,
-          createdAt: now,
-          updatedAt: now
-        };
-
-        if (isCompletedWeek) {
-          // Deterministic simulated golf scores for weeks 1-7
-          // Generate realistic scores: 65 to 76 (relative to par -7 to +4)
-          const seedNum = weekNumber * 10 + matchIdx;
+      if (isCompletedWeek) {
+        // All 10 teams have completed scores for Weeks 1 to 7
+        teams.forEach((t, tIdx) => {
+          const seedNum = weekNumber * 10 + tIdx;
           const grossA1 = 66 + ((seedNum * 7) % 8); // 66..73
           const grossA2 = 67 + ((seedNum * 11) % 9); // 67..75
-          const grossB1 = 66 + ((seedNum * 13) % 8); // 66..73
-          const grossB2 = 68 + ((seedNum * 17) % 8); // 68..75
 
-          const resA = ScoringService.calculateTeamResult(grossA1, false, grossA2, false, course.par, tA.currentQuota);
-          const resB = ScoringService.calculateTeamResult(grossB1, false, grossB2, false, course.par, tB.currentQuota);
+          const res = ScoringService.calculateTeamResult(grossA1, false, grossA2, false, course.par, t.currentQuota);
 
-          const tiebreaker = TiebreakerService.resolveFixtureMatch(
-            resA.weeklyNetResult,
-            resA.lowestGrossScore,
-            resA.secondGrossScore,
-            resB.weeklyNetResult,
-            resB.lowestGrossScore,
-            resB.secondGrossScore
-          );
+          let matchResult: 'WIN' | 'LOSS' | 'DRAW' = 'DRAW';
+          if (res.weeklyNetResult > 0) matchResult = 'WIN';
+          else if (res.weeklyNetResult < 0) matchResult = 'LOSS';
 
-          if (tiebreaker.winner === 'TEAM_A') {
-            fixture.winnerTeamId = tA.id;
-            fixture.matchResult = 'TEAM_A_WIN';
-          } else if (tiebreaker.winner === 'TEAM_B') {
-            fixture.winnerTeamId = tB.id;
-            fixture.matchResult = 'TEAM_B_WIN';
-          } else {
-            fixture.winnerTeamId = null;
-            fixture.matchResult = 'DRAW';
-          }
-
-          // Push player scores
+          // Player Scores
           const pScores = [
-            { pId: tA.playerAId, tId: tA.id, gross: grossA1, pts: resA.playerAPoints },
-            { pId: tA.playerBId, tId: tA.id, gross: grossA2, pts: resA.playerBPoints },
-            { pId: tB.playerAId, tId: tB.id, gross: grossB1, pts: resB.playerAPoints },
-            { pId: tB.playerBId, tId: tB.id, gross: grossB2, pts: resB.playerBPoints },
+            { pId: t.playerAId, gross: grossA1, pts: res.playerAPoints },
+            { pId: t.playerBId, gross: grossA2, pts: res.playerBPoints },
           ];
 
           pScores.forEach(ps => {
@@ -901,7 +953,7 @@ export class DatabaseEngine {
               id: scoreIdCounter++,
               fixtureId: fId,
               playerId: ps.pId,
-              teamId: ps.tId,
+              teamId: t.id,
               grossScore: ps.gross,
               coursePar: course.par,
               relativeToPar: ps.gross - course.par,
@@ -913,66 +965,40 @@ export class DatabaseEngine {
             });
           });
 
-          // Push Team Results
+          // Team Result
           teamResults.push({
             id: teamResultIdCounter++,
             fixtureId: fId,
-            teamId: tA.id,
-            playerAPoints: resA.playerAPoints,
-            playerBPoints: resA.playerBPoints,
-            teamPoints: resA.teamPoints,
-            teamQuota: resA.teamQuota,
-            weeklyNetResult: resA.weeklyNetResult,
-            lowestGrossScore: resA.lowestGrossScore,
-            secondGrossScore: resA.secondGrossScore,
-            matchResult: fixture.winnerTeamId === tA.id ? 'WIN' : (fixture.winnerTeamId === null ? 'DRAW' : 'LOSS'),
+            teamId: t.id,
+            playerAPoints: res.playerAPoints,
+            playerBPoints: res.playerBPoints,
+            teamPoints: res.teamPoints,
+            teamQuota: res.teamQuota,
+            weeklyNetResult: res.weeklyNetResult,
+            lowestGrossScore: res.lowestGrossScore,
+            secondGrossScore: res.secondGrossScore,
+            matchResult,
             createdAt: now,
             updatedAt: now
           });
+        });
+      } else if (isCurrentWeek) {
+        // 6 teams submitted scores in Week 8 for realistic active round demonstration
+        const submittedTeams = teams.slice(0, 6);
+        submittedTeams.forEach((t, tIdx) => {
+          const seedNum = weekNumber * 10 + tIdx + 3;
+          const grossA1 = 67 + ((seedNum * 5) % 7);
+          const grossA2 = 68 + ((seedNum * 9) % 8);
 
-          teamResults.push({
-            id: teamResultIdCounter++,
-            fixtureId: fId,
-            teamId: tB.id,
-            playerAPoints: resB.playerAPoints,
-            playerBPoints: resB.playerBPoints,
-            teamPoints: resB.teamPoints,
-            teamQuota: resB.teamQuota,
-            weeklyNetResult: resB.weeklyNetResult,
-            lowestGrossScore: resB.lowestGrossScore,
-            secondGrossScore: resB.secondGrossScore,
-            matchResult: fixture.winnerTeamId === tB.id ? 'WIN' : (fixture.winnerTeamId === null ? 'DRAW' : 'LOSS'),
-            createdAt: now,
-            updatedAt: now
-          });
-        } else if (isOpenWeek && matchIdx === 0) {
-          // Pre-enter 1 match in Week 8 for demo visual richness
-          const grossA1 = 67; // -5 on par 72 => 32 pts
-          const grossA2 = 68; // -4 on par 72 => 32 pts
-          const grossB1 = 70; // -2 on par 72 => 32 pts
-          const grossB2 = 74; // +2 on par 72 => 24 pts
+          const res = ScoringService.calculateTeamResult(grossA1, false, grossA2, false, course.par, t.currentQuota);
 
-          const resA = ScoringService.calculateTeamResult(grossA1, false, grossA2, false, course.par, tA.currentQuota);
-          const resB = ScoringService.calculateTeamResult(grossB1, false, grossB2, false, course.par, tB.currentQuota);
-
-          const tiebreaker = TiebreakerService.resolveFixtureMatch(
-            resA.weeklyNetResult,
-            resA.lowestGrossScore,
-            resA.secondGrossScore,
-            resB.weeklyNetResult,
-            resB.lowestGrossScore,
-            resB.secondGrossScore
-          );
-
-          fixture.status = 'COMPLETED';
-          fixture.winnerTeamId = tiebreaker.winner === 'TEAM_A' ? tA.id : (tiebreaker.winner === 'TEAM_B' ? tB.id : null);
-          fixture.matchResult = tiebreaker.winner === 'TEAM_A' ? 'TEAM_A_WIN' : (tiebreaker.winner === 'TEAM_B' ? 'TEAM_B_WIN' : 'DRAW');
+          let matchResult: 'WIN' | 'LOSS' | 'DRAW' = 'DRAW';
+          if (res.weeklyNetResult > 0) matchResult = 'WIN';
+          else if (res.weeklyNetResult < 0) matchResult = 'LOSS';
 
           const pScores = [
-            { pId: tA.playerAId, tId: tA.id, gross: grossA1, pts: resA.playerAPoints },
-            { pId: tA.playerBId, tId: tA.id, gross: grossA2, pts: resA.playerBPoints },
-            { pId: tB.playerAId, tId: tB.id, gross: grossB1, pts: resB.playerAPoints },
-            { pId: tB.playerBId, tId: tB.id, gross: grossB2, pts: resB.playerBPoints },
+            { pId: t.playerAId, gross: grossA1, pts: res.playerAPoints },
+            { pId: t.playerBId, gross: grossA2, pts: res.playerBPoints },
           ];
 
           pScores.forEach(ps => {
@@ -980,7 +1006,7 @@ export class DatabaseEngine {
               id: scoreIdCounter++,
               fixtureId: fId,
               playerId: ps.pId,
-              teamId: ps.tId,
+              teamId: t.id,
               grossScore: ps.gross,
               coursePar: course.par,
               relativeToPar: ps.gross - course.par,
@@ -995,39 +1021,23 @@ export class DatabaseEngine {
           teamResults.push({
             id: teamResultIdCounter++,
             fixtureId: fId,
-            teamId: tA.id,
-            playerAPoints: resA.playerAPoints,
-            playerBPoints: resA.playerBPoints,
-            teamPoints: resA.teamPoints,
-            teamQuota: resA.teamQuota,
-            weeklyNetResult: resA.weeklyNetResult,
-            lowestGrossScore: resA.lowestGrossScore,
-            secondGrossScore: resA.secondGrossScore,
-            matchResult: 'WIN',
+            teamId: t.id,
+            playerAPoints: res.playerAPoints,
+            playerBPoints: res.playerBPoints,
+            teamPoints: res.teamPoints,
+            teamQuota: res.teamQuota,
+            weeklyNetResult: res.weeklyNetResult,
+            lowestGrossScore: res.lowestGrossScore,
+            secondGrossScore: res.secondGrossScore,
+            matchResult,
             createdAt: now,
             updatedAt: now
           });
+        });
+      }
 
-          teamResults.push({
-            id: teamResultIdCounter++,
-            fixtureId: fId,
-            teamId: tB.id,
-            playerAPoints: resB.playerAPoints,
-            playerBPoints: resB.playerBPoints,
-            teamPoints: resB.teamPoints,
-            teamQuota: resB.teamQuota,
-            weeklyNetResult: resB.weeklyNetResult,
-            lowestGrossScore: resB.lowestGrossScore,
-            secondGrossScore: resB.secondGrossScore,
-            matchResult: 'LOSS',
-            createdAt: now,
-            updatedAt: now
-          });
-        }
-
-        fixtures.push(fixture);
-      });
-    });
+      fixtures.push(fixture);
+    }
 
     // Quota history
     const quotaHistory: QuotaHistory[] = teams.map((t, idx) => ({
@@ -1420,19 +1430,18 @@ export class DatabaseEngine {
       return { success: false, message: 'No active season found to generate schedule for.' };
     }
 
-    if (state.teams.length < 2) {
+    if (state.teams.length === 0) {
       return {
         success: false,
-        message: `At least 2 registered teams are required to generate fixtures (currently ${state.teams.length} registered).`
+        message: 'At least 1 registered team is required to generate fixtures.'
       };
     }
 
-    const generatedFixtures = ScheduleGenerator.generateRoundRobinSchedule({
+    const generatedFixtures = ScheduleGenerator.generateWeeklySchedule({
       seasonId: activeSeason.id,
       teams: state.teams,
       courses: state.courses,
       numWeeks,
-      matchesPerWeek,
       startDate: startDate || activeSeason.startDate
     });
 
@@ -1455,7 +1464,6 @@ export class DatabaseEngine {
 
     // Update settings
     state.settings.seasonLength = numWeeks;
-    state.settings.matchesPerWeek = matchesPerWeek;
 
     // Update season
     activeSeason.totalWeeks = numWeeks + (state.teams.length >= 4 ? 2 : 0);
@@ -1472,13 +1480,13 @@ export class DatabaseEngine {
       'SEASON',
       activeSeason.id,
       undefined,
-      `${numWeeks} Weeks, ${matchesPerWeek} Matches/Week (${generatedFixtures.length} Total Fixtures)`,
-      'Generated custom round-robin league schedule.'
+      `${numWeeks} Weekly Rounds (${generatedFixtures.length} Fixtures, All ${state.teams.length} Teams Play Weekly)`,
+      'Generated weekly all-teams league schedule.'
     );
 
     return {
       success: true,
-      message: `Successfully generated ${numWeeks}-week schedule with ${matchesPerWeek} matches per week (${generatedFixtures.length} total fixtures).`
+      message: `Successfully generated ${numWeeks} weekly fixtures. All ${state.teams.length} teams play in each weekly round.`
     };
   }
 

@@ -77,8 +77,8 @@ export interface Fixture {
   fixtureDate: string;
   deadline: string;
   courseId: number;
-  teamAId: number;
-  teamBId: number;
+  teamAId?: number;
+  teamBId?: number;
   status: FixtureStatus;
   winnerTeamId?: number | null; // null for draw
   matchResult?: MatchResult;

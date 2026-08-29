@@ -45,15 +45,11 @@ export class StandingsService {
       let totalTeamPoints = 0;
       let totalNetResult = 0;
 
-      // Fixtures for this team that are completed
-      const teamFixtures = regularFixtures.filter(
-        f => completedFixtureIds.has(f.id) && (f.teamAId === team.id || f.teamBId === team.id)
-      );
-
-      teamFixtures.forEach(fix => {
-        played++;
+      // Fixtures for this season where this team has a recorded TeamResult
+      regularFixtures.forEach(fix => {
         const res = teamResults.find(r => r.fixtureId === fix.id && r.teamId === team.id);
         if (res) {
+          played++;
           totalTeamPoints += res.teamPoints;
           // Running Net Result accumulation: positive adds, negative subtracts
           totalNetResult += res.weeklyNetResult;

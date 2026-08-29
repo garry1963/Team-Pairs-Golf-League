@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Trophy, Users, Calendar, Clock, ArrowRight, ShieldCheck,
-  ChevronRight, AlertCircle, Award, CheckCircle2, TrendingUp, Edit3
+  ChevronRight, AlertCircle, Award, CheckCircle2, TrendingUp, Edit3, Flag
 } from 'lucide-react';
 import { Season, StandingsRow, Fixture, Team, TeamResult } from '../../types';
 import { DeadlineService, CountdownState } from '../../engine/deadline';
@@ -34,8 +34,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     displayText: '02 : 14 : 35'
   });
 
-  const activeWeekFixtures = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === season.currentWeek);
-  const currentWeekDeadline = activeWeekFixtures[0]?.deadline;
+  const activeWeekFixture = fixtures.find(f => f.seasonId === season.id && f.weekNumber === season.currentWeek);
+  const currentWeekDeadline = activeWeekFixture?.deadline;
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -48,9 +48,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     return () => clearInterval(timer);
   }, [currentWeekDeadline]);
 
-  const completedFixtures = fixtures.filter(f => f.seasonId === season.id && f.status === 'COMPLETED');
-  const outstandingFixtures = activeWeekFixtures.filter(f => f.status !== 'COMPLETED');
-  const leader = standings[0];
+  const regularFixtures = fixtures.filter(f => f.seasonId === season.id && !f.isPlayoff);
+  const completedFixtures = regularFixtures.filter(f => f.status === 'COMPLETED');
+  const weekResults = activeWeekFixture ? teamResults.filter(r => r.fixtureId === activeWeekFixture.id) : [];
 
   const teamMap = new Map<number, Team>();
   teams.forEach(t => teamMap.set(t.id, t));
@@ -72,7 +72,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             {season.name}
           </h1>
           <p className="text-xs text-slate-500">
-            Official 10-Team Pairs Golf League Management • Automated Quota & Net Scoring
+            Official 10-Team Pairs Golf League &bull; All Teams Field Round &bull; Automated Quota &amp; Net Scoring
           </p>
         </div>
 
@@ -91,46 +91,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       </div>
 
-      {/* 6 Key Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* 4 Key Stat Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
             <span>Teams</span>
             <Users className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{teams.length}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Pairs in league</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">All teams active weekly</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Players</span>
-            <Users className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">20</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">2 Players / team</div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Leader</span>
-            <Trophy className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="text-lg font-bold text-slate-900 mt-1 truncate">
-            {leader ? leader.teamName : 'TBD'}
-          </div>
-          <div className="text-[11px] text-green-600 font-medium mt-0.5">
-            {leader ? `${leader.seasonPoints} pts (${leader.totalNetResult > 0 ? `+${leader.totalNetResult}` : leader.totalNetResult} Net)` : ''}
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Current Week</span>
+            <span>Current Round</span>
             <Calendar className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-1">
-            {season.currentWeek} <span className="text-xs text-slate-400 font-normal">/ {season.totalWeeks}</span>
+            Week {season.currentWeek} <span className="text-xs text-slate-400 font-normal">/ {regularFixtures.length}</span>
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
             {season.currentWeek >= 15 ? 'Playoff Zone' : 'Regular Season'}
@@ -139,30 +117,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Completed</span>
+            <span>Completed Weeks</span>
             <CheckCircle2 className="w-4 h-4 text-green-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-1">
-            {completedFixtures.length} <span className="text-xs text-slate-400 font-normal">/ {fixtures.length}</span>
+            {completedFixtures.length} <span className="text-xs text-slate-400 font-normal">/ {regularFixtures.length}</span>
           </div>
-          <div className="text-[11px] text-green-600 font-medium mt-0.5">Finalized matches</div>
+          <div className="text-[11px] text-green-600 font-medium mt-0.5">Finalized rounds</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>Outstanding</span>
-            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <span>Week Submissions</span>
+            <Clock className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-2xl font-bold text-amber-600 mt-1">
-            {outstandingFixtures.length}
+            {weekResults.length} <span className="text-xs text-slate-400 font-normal">/ {teams.length}</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Matches pending</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Teams submitted for Week {season.currentWeek}</div>
         </div>
       </div>
 
-      {/* Main Grid: Top 5 Standings & Latest / Upcoming Fixtures */}
+      {/* Main Grid: Standings (Left 7 cols) & Active Week Round (Right 5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Top 5 Standings (7 cols) */}
+        {/* Left Column: Top Standings */}
         <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div className="flex items-center space-x-2">
@@ -209,7 +187,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </td>
                     <td className="py-3 px-3 font-semibold text-slate-800 group-hover:text-blue-600">
                       <div>{row.teamName}</div>
-                      <div className="text-[10px] text-slate-400 font-normal">{row.playerAName} & {row.playerBName}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">{row.playerAName} &amp; {row.playerBName}</div>
                     </td>
                     <td className="py-3 px-3 text-center font-bold text-blue-700 bg-blue-50/50">
                       <span className={`font-mono ${row.seasonPoints > 0 ? 'text-green-700' : row.seasonPoints < 0 ? 'text-rose-700' : 'text-blue-700'}`}>
@@ -237,15 +215,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Latest Results & Next Fixtures (5 cols) */}
+        {/* Right Column: Active Week Fixture Round & Submissions */}
         <div className="lg:col-span-5 space-y-4">
-          {/* Active Week Matches */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <Calendar className="w-4 h-4 text-blue-600" />
                 <h3 className="font-bold text-slate-800 text-sm">
-                  Week {season.currentWeek} Fixtures
+                  Week {season.currentWeek} Fixture Round
                 </h3>
               </div>
               <button
@@ -256,57 +233,52 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </button>
             </div>
 
-            <div className="space-y-2.5">
-              {activeWeekFixtures.slice(0, 4).map(fix => {
-                const teamA = teamMap.get(fix.teamAId);
-                const teamB = teamMap.get(fix.teamBId);
-                const resA = teamResults.find(r => r.fixtureId === fix.id && r.teamId === fix.teamAId);
-                const resB = teamResults.find(r => r.fixtureId === fix.id && r.teamId === fix.teamBId);
+            {/* Week Status Banner */}
+            <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-blue-700 block">Weekly Field Round</span>
+                <span className="text-xs font-semibold text-slate-900">
+                  {weekResults.length} of {teams.length} Teams Submitted
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  if (activeWeekFixture) onSelectFixture(activeWeekFixture.id);
+                  onNavigate('score-entry');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Enter Scores</span>
+              </button>
+            </div>
+
+            {/* List of Teams in Current Week */}
+            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {teams.map(t => {
+                const res = activeWeekFixture ? teamResults.find(r => r.fixtureId === activeWeekFixture.id && r.teamId === t.id) : null;
 
                 return (
                   <div
-                    key={fix.id}
+                    key={t.id}
                     className="p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-slate-300 transition flex items-center justify-between gap-3"
                   >
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className={fix.winnerTeamId === fix.teamAId ? 'text-blue-700 font-bold' : 'text-slate-800'}>
-                          {teamA?.teamName}
-                        </span>
-                        {resA && (
-                          <span className="font-mono text-green-600 font-bold">
-                            {resA.weeklyNetResult > 0 ? `+${resA.weeklyNetResult}` : resA.weeklyNetResult}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className={fix.winnerTeamId === fix.teamBId ? 'text-blue-700 font-bold' : 'text-slate-800'}>
-                          {teamB?.teamName}
-                        </span>
-                        {resB && (
-                          <span className="font-mono text-green-600 font-bold">
-                            {resB.weeklyNetResult > 0 ? `+${resB.weeklyNetResult}` : resB.weeklyNetResult}
-                          </span>
-                        )}
-                      </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900">{t.teamName}</div>
+                      <div className="text-[10px] text-slate-400">Quota: {t.currentQuota} pts</div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
-                      {fix.status === 'COMPLETED' ? (
-                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                          FINAL
+                    <div className="text-right">
+                      {res ? (
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                          res.weeklyNetResult >= 0 ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {res.weeklyNetResult >= 0 ? `+${res.weeklyNetResult}` : res.weeklyNetResult} Net
                         </span>
                       ) : (
-                        <button
-                          onClick={() => {
-                            onSelectFixture(fix.id);
-                            onNavigate('score-entry');
-                          }}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition flex items-center space-x-1"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                          <span>Enter</span>
-                        </button>
+                        <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                          Pending
+                        </span>
                       )}
                     </div>
                   </div>
@@ -337,4 +309,3 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     </div>
   );
 };
-

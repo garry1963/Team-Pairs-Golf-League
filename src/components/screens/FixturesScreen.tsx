@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Calendar, Flag, Edit3, CheckCircle2, Trophy, ArrowRight, Check } from 'lucide-react';
-import { Fixture, Season, Team, Course, TeamResult } from '../../types';
+import { Calendar, Flag, Edit3, CheckCircle2, Trophy, ArrowRight, Check, Users, Clock, AlertCircle } from 'lucide-react';
+import { Fixture, Season, Team, Course, TeamResult, Player } from '../../types';
 import { DatabaseEngine } from '../../storage/db';
 
 interface FixturesScreenProps {
   season: Season;
   fixtures: Fixture[];
   teams: Team[];
+  players: Player[];
   courses: Course[];
   teamResults: TeamResult[];
   onSelectFixture: (fixtureId: number) => void;
@@ -18,6 +19,7 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
   season,
   fixtures,
   teams,
+  players,
   courses,
   teamResults,
   onSelectFixture,
@@ -25,46 +27,34 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
   onToast
 }) => {
   const [selectedWeek, setSelectedWeek] = useState<number>(season.currentWeek);
-  const [selectedCourseForWeek, setSelectedCourseForWeek] = useState<number>(courses[0]?.id || 1);
 
   const teamMap = new Map<number, Team>();
   teams.forEach(t => teamMap.set(t.id, t));
 
+  const playerMap = new Map<number, Player>();
+  players.forEach(p => playerMap.set(p.id, p));
+
   const courseMap = new Map<number, Course>();
   courses.forEach(c => courseMap.set(c.id, c));
 
-  // Determine available regular season weeks
-  const maxFixtureWeek = fixtures.length > 0
-    ? Math.max(...fixtures.filter(f => !f.isPlayoff).map(f => f.weekNumber), 1)
+  const regularFixtures = fixtures.filter(f => f.seasonId === season.id && !f.isPlayoff);
+  const maxFixtureWeek = regularFixtures.length > 0
+    ? Math.max(...regularFixtures.map(f => f.weekNumber), 1)
     : (season.totalWeeks ? Math.max(1, season.totalWeeks - 2) : 15);
-  
-  const regularWeeksCount = maxFixtureWeek;
-  const weekTabs = Array.from({ length: regularWeeksCount }, (_, i) => i + 1);
 
-  const semifinalWeek = regularWeeksCount + 1;
-  const championshipWeek = regularWeeksCount + 2;
+  const weekTabs = Array.from({ length: maxFixtureWeek }, (_, i) => i + 1);
+  const currentWeekFixture = regularFixtures.find(f => f.weekNumber === selectedWeek) || regularFixtures[0];
+  const currentCourse = courseMap.get(currentWeekFixture?.courseId || 1) || courses[0];
 
-  const filteredFixtures = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === selectedWeek);
-  const matchesPerWeekCount = filteredFixtures.length || (fixtures.length > 0 ? Math.round(fixtures.length / Math.max(1, regularWeeksCount)) : 5);
+  const weekResults = currentWeekFixture
+    ? teamResults.filter(r => r.fixtureId === currentWeekFixture.id)
+    : [];
 
-  // Check dominant course for the current week
-  const weekCourseIds: number[] = Array.from(new Set(filteredFixtures.map(f => f.courseId)));
-  const primaryWeekCourse = weekCourseIds.length === 1 ? courseMap.get(weekCourseIds[0]) : null;
-
-  const handleSetCourseForFixture = (fixtureId: number, courseId: number) => {
-    const res = DatabaseEngine.updateFixtureCourse(fixtureId, courseId);
+  const handleSetCourseForWeek = (newCourseId: number) => {
+    if (!currentWeekFixture) return;
+    const res = DatabaseEngine.updateFixtureCourse(currentWeekFixture.id, newCourseId);
     if (res.success) {
-      if (onToast) onToast('success', 'Match Course Updated', res.message);
-    } else {
-      if (onToast) onToast('error', 'Update Failed', res.message);
-    }
-  };
-
-  const handleApplyCourseToAllWeek = () => {
-    if (!selectedCourseForWeek) return;
-    const res = DatabaseEngine.updateWeekCourse(season.id, selectedWeek, selectedCourseForWeek);
-    if (res.success) {
-      if (onToast) onToast('success', `Week ${selectedWeek} Course Set`, res.message);
+      if (onToast) onToast('success', 'Host Course Updated', res.message);
     } else {
       if (onToast) onToast('error', 'Update Failed', res.message);
     }
@@ -78,11 +68,11 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
           <div className="flex items-center space-x-2">
             <Calendar className="w-6 h-6 text-blue-600" />
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Weekly Fixtures & Match Schedule
+              Weekly Fixtures &amp; Rounds
             </h1>
           </div>
           <p className="text-xs text-slate-500">
-            {season.name} &bull; {regularWeeksCount} Regular Season Weeks &bull; {matchesPerWeekCount} Matches per week
+            {season.name} &bull; All {teams.length} teams play each weekly round &bull; {maxFixtureWeek} Regular Season Weeks
           </p>
         </div>
 
@@ -96,328 +86,209 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
             <span>Course Library ({courses.length})</span>
           </button>
           <button
-            onClick={() => onNavigate('settings')}
-            className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+            onClick={() => onNavigate('score-entry')}
+            className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1.5"
           >
-            Adjust Season Length
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>Score Entry Center</span>
           </button>
-          {fixtures.length > 0 && (
-            <button
-              onClick={() => setSelectedWeek(season.currentWeek)}
-              className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center space-x-2"
-            >
-              <span>Jump to Active (Week {season.currentWeek})</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>
 
-      {fixtures.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-xl border border-slate-200 shadow-sm text-slate-600 space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 text-2xl">
-            📅
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-slate-900">No League Schedule Generated Yet</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              You currently have {teams.length} teams registered. Go to League Settings to configure your desired season length and generate your round-robin schedule.
-            </p>
-          </div>
-          <div className="flex items-center justify-center space-x-3 pt-2">
-            <button
-              onClick={() => onNavigate('teams')}
-              className="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
-            >
-              Manage Teams ({teams.length})
-            </button>
-            <button
-              onClick={() => onNavigate('settings')}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
-            >
-              Configure Season & Generate Schedule
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Week Selector Tabs */}
-          <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 custom-scrollbar">
-            {weekTabs.map(w => {
-              const isCurrent = season.currentWeek === w;
-              const isSelected = selectedWeek === w;
-              const weekFix = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === w);
-              const allCompleted = weekFix.length > 0 && weekFix.every(f => f.status === 'COMPLETED');
+      {/* Week Selector Tabs */}
+      <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 custom-scrollbar">
+        {weekTabs.map(w => {
+          const isCurrent = season.currentWeek === w;
+          const isSelected = selectedWeek === w;
+          const fix = regularFixtures.find(f => f.weekNumber === w);
+          const isCompleted = fix?.status === 'COMPLETED';
 
-              return (
-                <button
-                  key={w}
-                  onClick={() => setSelectedWeek(w)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center space-x-1.5 border ${
-                    isSelected
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <span>Week {w}</span>
-                  {allCompleted ? (
-                    <CheckCircle2 className="w-3 h-3 text-green-500" />
-                  ) : isCurrent ? (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  ) : null}
-                </button>
-              );
-            })}
-
-            {/* Playoff Semifinal Tab */}
+          return (
             <button
-              onClick={() => setSelectedWeek(semifinalWeek)}
+              key={w}
+              onClick={() => setSelectedWeek(w)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center space-x-1.5 border ${
-                selectedWeek === semifinalWeek
-                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                isSelected
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>Week {semifinalWeek} Semifinals</span>
+              <span>Week {w}</span>
+              {isCompleted ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500" />
+              ) : isCurrent ? (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              ) : null}
             </button>
+          );
+        })}
+      </div>
 
-            {/* Championship Tab */}
-            <button
-              onClick={() => setSelectedWeek(championshipWeek)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center space-x-1.5 border ${
-                selectedWeek === championshipWeek
-                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>Week {championshipWeek} Championship</span>
-            </button>
-          </div>
-
-          {/* Week Host Course Quick Setter Bar */}
-          {filteredFixtures.length > 0 && (
-            <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <Flag className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 flex items-center space-x-2">
-                    <span>Host Course for Week {selectedWeek}</span>
-                    {primaryWeekCourse ? (
-                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-semibold">
-                        Par {primaryWeekCourse.par} &bull; {primaryWeekCourse.tees}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">
-                        Mixed / Custom Courses Assigned
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {primaryWeekCourse
-                      ? `${primaryWeekCourse.courseName}${primaryWeekCourse.location ? ` (${primaryWeekCourse.location})` : ''}`
-                      : 'Different matches in Week ' + selectedWeek + ' are assigned to separate courses.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Set All Matches in Week Dropdown & Button */}
-              <div className="flex items-center space-x-2 self-end md:self-center">
+      {/* Week Round Information & Host Course Card */}
+      {currentWeekFixture && (
+        <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Flag className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2.5">
+                <span className="text-xs font-bold text-slate-900">
+                  Week {selectedWeek} Host Course:
+                </span>
                 <select
-                  value={selectedCourseForWeek}
-                  onChange={(e) => setSelectedCourseForWeek(Number(e.target.value))}
-                  className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  value={currentWeekFixture.courseId}
+                  onChange={e => handleSetCourseForWeek(Number(e.target.value))}
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
                 >
                   {courses.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.courseName} (Par {c.par})
+                      {c.courseName} (Par {c.par}, {c.tees})
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={handleApplyCourseToAllWeek}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center space-x-1.5 whitespace-nowrap"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Set for All Week {selectedWeek} Matches</span>
-                </button>
+              </div>
+
+              <div className="flex items-center space-x-3 text-xs text-slate-500 mt-1">
+                <span>Par {currentCourse?.par || 72}</span>
+                <span>&bull;</span>
+                <span>{currentCourse?.tees || 'White Tees'}</span>
+                {currentCourse?.location && (
+                  <>
+                    <span>&bull;</span>
+                    <span>{currentCourse.location}</span>
+                  </>
+                )}
+                <span>&bull;</span>
+                <span>Scheduled: {currentWeekFixture.fixtureDate}</span>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Fixtures List */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-              <span className="font-semibold text-slate-800">
-                {selectedWeek === semifinalWeek
-                  ? `Week ${semifinalWeek} Postseason (Semifinals & Consolation Matches)`
-                  : selectedWeek === championshipWeek
-                  ? `Week ${championshipWeek} Championship Match`
-                  : `Week ${selectedWeek} Regular Season Fixtures (${filteredFixtures.length} Matches)`}
-              </span>
-              <span>Click card to enter scores &bull; Set individual course per match below</span>
-            </div>
-
-            {filteredFixtures.length === 0 ? (
-              <div className="p-12 text-center bg-white rounded-xl border border-slate-200 text-slate-500 text-sm space-y-2">
-                <p>No fixtures scheduled for Week {selectedWeek}.</p>
-                {selectedWeek >= semifinalWeek && (
-                  <p className="text-xs text-amber-600 font-medium">
-                    Playoff matches will automatically generate when the regular season (Week {regularWeeksCount}) is finalized!
-                  </p>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <div className="text-xs font-bold text-slate-800">
+                {weekResults.length} / {teams.length} Teams Submitted
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {currentWeekFixture.status === 'COMPLETED' ? (
+                  <span className="text-green-600 font-semibold">● Round Completed</span>
+                ) : (
+                  <span className="text-amber-600 font-semibold">● Open for Score Entry</span>
                 )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredFixtures.map((fix) => {
-                  const teamA = teamMap.get(fix.teamAId);
-                  const teamB = teamMap.get(fix.teamBId);
-                  const course = courseMap.get(fix.courseId);
-                  const resA = teamResults.find(r => r.fixtureId === fix.id && r.teamId === fix.teamAId);
-                  const resB = teamResults.find(r => r.fixtureId === fix.id && r.teamId === fix.teamBId);
-                  const isCompleted = fix.status === 'COMPLETED';
+            </div>
 
-                  return (
-                    <div
-                      key={fix.id}
-                      onClick={() => {
-                        onSelectFixture(fix.id);
-                        onNavigate('score-entry');
-                      }}
-                      className="bg-white rounded-xl border border-slate-200 hover:border-blue-400 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group space-y-4"
-                    >
-                      {/* Fixture Top Info with Course Selector */}
-                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2.5">
-                        <div
-                          className="flex items-center space-x-1.5 text-slate-700 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2 py-1 rounded-lg transition"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                        >
-                          <Flag className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <select
-                            value={fix.courseId}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              handleSetCourseForFixture(fix.id, Number(e.target.value));
-                            }}
-                            className="bg-transparent border-0 text-slate-800 text-xs font-semibold focus:outline-none cursor-pointer pr-1"
-                            title="Set golf course for this weekly fixture"
-                          >
-                            {courses.map(c => (
-                              <option key={c.id} value={c.id}>
-                                {c.courseName} (Par {c.par})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          {isCompleted ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
-                              COMPLETED
-                            </span>
-                          ) : fix.status === 'OPEN' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
-                              OPEN FOR SCORES
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
-                              SCHEDULED
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Match Teams & Live Scores */}
-                      <div className="space-y-3">
-                        {/* Team A */}
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 group-hover:border-slate-200 transition">
-                          <div>
-                            <div className="font-bold text-slate-900 text-sm flex items-center space-x-2">
-                              <span>{teamA?.teamName || 'Team A'}</span>
-                              {fix.winnerTeamId === teamA?.id && (
-                                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
-                                  WINNER
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              Quota: {teamA?.currentQuota} {teamA?.quotaLocked && '🔒'}
-                            </div>
-                          </div>
-
-                          {resA ? (
-                            <div className="text-right">
-                              <div className="font-mono text-base font-black text-green-600">
-                                {resA.weeklyNetResult > 0 ? `+${resA.weeklyNetResult}` : resA.weeklyNetResult} Net
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {resA.teamPoints} Team Pts
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400 font-mono">--</span>
-                          )}
-                        </div>
-
-                        {/* Team B */}
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 group-hover:border-slate-200 transition">
-                          <div>
-                            <div className="font-bold text-slate-900 text-sm flex items-center space-x-2">
-                              <span>{teamB?.teamName || 'Team B'}</span>
-                              {fix.winnerTeamId === teamB?.id && (
-                                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
-                                  WINNER
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              Quota: {teamB?.currentQuota} {teamB?.quotaLocked && '🔒'}
-                            </div>
-                          </div>
-
-                          {resB ? (
-                            <div className="text-right">
-                              <div className="font-mono text-base font-black text-green-600">
-                                {resB.weeklyNetResult > 0 ? `+${resB.weeklyNetResult}` : resB.weeklyNetResult} Net
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {resB.teamPoints} Team Pts
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400 font-mono">--</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Card Bottom CTA */}
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-[11px] text-slate-400 flex items-center space-x-1">
-                          <span>{course?.tees || 'White Tees'}</span>
-                          <span>&bull;</span>
-                          <span>Par {course?.par || 72}</span>
-                        </span>
-                        <span className="text-blue-600 font-semibold text-xs flex items-center space-x-1 group-hover:translate-x-0.5 transition">
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>{isCompleted ? 'Review / Edit Scores' : 'Enter Scores'}</span>
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <button
+              onClick={() => {
+                onSelectFixture(currentWeekFixture.id);
+                onNavigate('score-entry');
+              }}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Enter / Edit Scores</span>
+            </button>
           </div>
-        </>
+        </div>
       )}
+
+      {/* Week Teams Grid: All Teams playing in Week X */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+          <span className="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+            <Users className="w-4 h-4 text-blue-600" />
+            <span>All Teams in Week {selectedWeek} Round ({teams.length} Teams)</span>
+          </span>
+          <span>Stableford Quota Scoring &bull; Click any team card to enter or review scores</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {teams.map(t => {
+            const res = currentWeekFixture
+              ? teamResults.find(r => r.fixtureId === currentWeekFixture.id && r.teamId === t.id)
+              : null;
+            const pA = playerMap.get(t.playerAId);
+            const pB = playerMap.get(t.playerBId);
+            const isCompleted = !!res;
+
+            return (
+              <div
+                key={t.id}
+                onClick={() => {
+                  if (currentWeekFixture) {
+                    onSelectFixture(currentWeekFixture.id);
+                    onNavigate('score-entry');
+                  }
+                }}
+                className="bg-white rounded-xl border border-slate-200 hover:border-blue-400 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group space-y-3 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
+                        {t.teamName}
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {pA?.displayName || 'Player A'} &amp; {pB?.displayName || 'Player B'}
+                      </p>
+                    </div>
+
+                    <div>
+                      {isCompleted ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
+                          SUBMITTED
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
+                          PENDING
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center py-3">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-medium block">Team Points</span>
+                      <span className="font-mono text-sm font-bold text-slate-900">
+                        {res ? res.teamPoints : '--'}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-medium block">Quota</span>
+                      <span className="font-mono text-sm font-bold text-slate-700">
+                        {res ? res.teamQuota : t.currentQuota}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-medium block">Net Result</span>
+                      {res ? (
+                        <span className={`font-mono text-sm font-black ${
+                          res.weeklyNetResult >= 0 ? 'text-green-600' : 'text-rose-600'
+                        }`}>
+                          {res.weeklyNetResult >= 0 ? `+${res.weeklyNetResult}` : res.weeklyNetResult}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono text-xs">--</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 text-slate-400">
+                  <span>{currentCourse?.courseName || 'Host Course'}</span>
+                  <span className="text-blue-600 font-semibold flex items-center space-x-1 group-hover:translate-x-0.5 transition">
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>{isCompleted ? 'Edit Score' : 'Enter Score'}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
-
-

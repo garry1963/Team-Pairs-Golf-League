@@ -164,6 +164,7 @@ export default function App() {
             season={activeSeason}
             fixtures={dbState.fixtures}
             teams={dbState.teams}
+            players={dbState.players}
             courses={dbState.courses}
             teamResults={dbState.teamResults}
             onSelectFixture={handleSelectFixture}
