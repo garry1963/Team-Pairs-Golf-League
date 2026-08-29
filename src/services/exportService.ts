@@ -84,30 +84,26 @@ export class ExportService {
       `#${row.position}`,
       row.teamName,
       `${row.playerAName} & ${row.playerBName}`,
-      row.played.toString(),
-      row.wins.toString(),
-      row.draws.toString(),
-      row.losses.toString(),
-      row.seasonPoints.toString(),
+      row.seasonPoints > 0 ? `+${row.seasonPoints}` : row.seasonPoints.toString(),
       row.totalTeamPoints.toString(),
-      row.totalNetResult > 0 ? `+${row.totalNetResult}` : row.totalNetResult.toString(),
       row.avgNetResult > 0 ? `+${row.avgNetResult}` : row.avgNetResult.toString(),
+      row.currentQuota.toString(),
       row.status
     ]);
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Pos', 'Team', 'Players', 'P', 'W', 'D', 'L', 'Pts', 'Team Pts', 'Net Res', 'Avg Net', 'Zone']],
+      head: [['Pos', 'Team', 'Players', 'Season Pts (Net)', 'Team Pts', 'Avg Net', 'Quota', 'Zone']],
       body: tableRows,
       theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { fontSize: 8.5, cellPadding: 2.2 },
       headStyles: { fillColor: primaryColor, textColor: [255, 255, 255] },
       alternateRowStyles: { fillColor: [248, 250, 248] },
       didParseCell: (data) => {
         if (data.section === 'body') {
           const pos = standings[data.row.index]?.position;
           if (pos && pos <= 4) {
-            if (data.column.index === 0 || data.column.index === 11) {
+            if (data.column.index === 0 || data.column.index === 7) {
               data.cell.styles.textColor = [16, 110, 60];
               data.cell.styles.fontStyle = 'bold';
             }
@@ -185,20 +181,16 @@ export class ExportService {
       `#${r.position}`,
       r.teamName,
       `${r.playerAName} & ${r.playerBName}`,
-      r.played,
-      r.wins,
-      r.draws,
-      r.losses,
-      r.seasonPoints,
-      r.totalTeamPoints,
-      r.totalNetResult > 0 ? `+${r.totalNetResult}` : r.totalNetResult,
-      r.avgNetResult > 0 ? `+${r.avgNetResult}` : r.avgNetResult,
+      r.seasonPoints > 0 ? `+${r.seasonPoints}` : r.seasonPoints.toString(),
+      r.totalTeamPoints.toString(),
+      r.avgNetResult > 0 ? `+${r.avgNetResult}` : r.avgNetResult.toString(),
+      r.currentQuota.toString(),
       r.status
     ]);
 
     autoTable(doc, {
       startY: 32,
-      head: [['Pos', 'Team', 'Players', 'P', 'W', 'D', 'L', 'Pts', 'Team Pts', 'Net Res', 'Avg Net', 'Zone']],
+      head: [['Pos', 'Team', 'Players', 'Season Pts (Net)', 'Team Pts', 'Avg Net', 'Quota', 'Zone']],
       body: rows,
       theme: 'striped',
       styles: { fontSize: 8.5, cellPadding: 2.2 },
@@ -268,13 +260,8 @@ export class ExportService {
       Team: r.teamName,
       'Player A': r.playerAName,
       'Player B': r.playerBName,
-      Played: r.played,
-      Wins: r.wins,
-      Draws: r.draws,
-      Losses: r.losses,
       'Season Points': r.seasonPoints,
       'Total Team Points': r.totalTeamPoints,
-      'Total Net Result': r.totalNetResult,
       'Average Net Result': r.avgNetResult,
       'Current Quota': r.currentQuota,
       'Quota Locked': r.quotaLocked ? 'YES' : 'NO',

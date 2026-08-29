@@ -10,7 +10,7 @@ interface LeagueTableScreenProps {
   onSelectTeam: (teamId: number) => void;
 }
 
-type SortField = 'position' | 'teamName' | 'played' | 'wins' | 'draws' | 'losses' | 'seasonPoints' | 'totalTeamPoints' | 'totalNetResult' | 'avgNetResult' | 'currentQuota';
+type SortField = 'position' | 'teamName' | 'seasonPoints' | 'totalTeamPoints' | 'totalNetResult' | 'avgNetResult' | 'currentQuota';
 
 export const LeagueTableScreen: React.FC<LeagueTableScreenProps> = ({
   season,
@@ -104,52 +104,43 @@ export const LeagueTableScreen: React.FC<LeagueTableScreenProps> = ({
           <table className="w-full text-xs text-left text-slate-700 border-collapse">
             <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-100">
               <tr>
-                <th onClick={() => handleSort('position')} className="py-3 px-3 cursor-pointer hover:text-slate-900">
+                <th onClick={() => handleSort('position')} className="py-3 px-4 cursor-pointer hover:text-slate-900 w-16">
                   <div className="flex items-center space-x-1">
                     <span>Pos</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
-                <th onClick={() => handleSort('teamName')} className="py-3 px-3 cursor-pointer hover:text-slate-900">
+                <th onClick={() => handleSort('teamName')} className="py-3 px-4 cursor-pointer hover:text-slate-900">
                   <div className="flex items-center space-x-1">
                     <span>Team & Players</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
-                <th onClick={() => handleSort('played')} className="py-3 px-2.5 text-center cursor-pointer hover:text-slate-900">
-                  P
-                </th>
-                <th onClick={() => handleSort('wins')} className="py-3 px-2.5 text-center cursor-pointer hover:text-slate-900 font-bold text-green-700">
-                  W
-                </th>
-                <th onClick={() => handleSort('draws')} className="py-3 px-2.5 text-center cursor-pointer hover:text-slate-900">
-                  D
-                </th>
-                <th onClick={() => handleSort('losses')} className="py-3 px-2.5 text-center cursor-pointer hover:text-slate-900">
-                  L
-                </th>
-                <th onClick={() => handleSort('seasonPoints')} className="py-3 px-3.5 text-center cursor-pointer hover:text-blue-900 font-bold text-blue-700 bg-blue-50/50">
+                <th onClick={() => handleSort('seasonPoints')} className="py-3 px-4 text-center cursor-pointer hover:text-blue-900 font-bold text-blue-700 bg-blue-50/50">
                   <div className="flex items-center justify-center space-x-1">
-                    <span>Season Pts</span>
+                    <span>Season Points (Net Total)</span>
                     <ArrowUpDown className="w-3 h-3 text-blue-500" />
                   </div>
                 </th>
-                <th onClick={() => handleSort('totalTeamPoints')} className="py-3 px-3 text-center cursor-pointer hover:text-slate-900">
-                  Team Pts
-                </th>
-                <th onClick={() => handleSort('totalNetResult')} className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 font-bold">
+                <th onClick={() => handleSort('totalTeamPoints')} className="py-3 px-4 text-center cursor-pointer hover:text-slate-900">
                   <div className="flex items-center justify-center space-x-1">
-                    <span>Net Result</span>
+                    <span>Total Team Pts</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
-                <th onClick={() => handleSort('avgNetResult')} className="py-3 px-3 text-center cursor-pointer hover:text-slate-900">
-                  Avg Net
+                <th onClick={() => handleSort('avgNetResult')} className="py-3 px-4 text-center cursor-pointer hover:text-slate-900">
+                  <div className="flex items-center justify-center space-x-1">
+                    <span>Avg Net / Match</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
                 </th>
-                <th onClick={() => handleSort('currentQuota')} className="py-3 px-3 text-center cursor-pointer hover:text-slate-900">
-                  Quota
+                <th onClick={() => handleSort('currentQuota')} className="py-3 px-4 text-center cursor-pointer hover:text-slate-900">
+                  <div className="flex items-center justify-center space-x-1">
+                    <span>Team Quota</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
                 </th>
-                <th className="py-3 px-3 text-right">Zone</th>
+                <th className="py-3 px-4 text-right">Zone</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -163,9 +154,9 @@ export const LeagueTableScreen: React.FC<LeagueTableScreenProps> = ({
                     className="hover:bg-slate-50 transition group cursor-pointer"
                   >
                     {/* Position */}
-                    <td className="py-3.5 px-3 font-bold text-slate-800">
+                    <td className="py-3.5 px-4 font-bold text-slate-800">
                       <span
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold ${
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold ${
                           row.position === 1
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : row.position <= 4
@@ -178,7 +169,7 @@ export const LeagueTableScreen: React.FC<LeagueTableScreenProps> = ({
                     </td>
 
                     {/* Team & Players */}
-                    <td className="py-3.5 px-3">
+                    <td className="py-3.5 px-4">
                       <div className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
                         {row.teamName}
                       </div>
@@ -187,50 +178,41 @@ export const LeagueTableScreen: React.FC<LeagueTableScreenProps> = ({
                       </div>
                     </td>
 
-                    {/* Record Stats */}
-                    <td className="py-3.5 px-2.5 text-center text-slate-600 font-semibold">{row.played}</td>
-                    <td className="py-3.5 px-2.5 text-center font-bold text-green-600">{row.wins}</td>
-                    <td className="py-3.5 px-2.5 text-center text-slate-400">{row.draws}</td>
-                    <td className="py-3.5 px-2.5 text-center text-red-500">{row.losses}</td>
-
-                    {/* Season Points */}
-                    <td className="py-3.5 px-3.5 text-center font-bold text-sm text-blue-700 bg-blue-50/50">
-                      {row.seasonPoints}
-                    </td>
-
-                    {/* Team Points */}
-                    <td className="py-3.5 px-3 text-center text-slate-600 font-mono">
-                      {row.totalTeamPoints}
-                    </td>
-
-                    {/* Total Net Result */}
-                    <td className="py-3.5 px-3 text-center font-mono font-bold text-sm">
-                      <span className={row.totalNetResult >= 0 ? 'text-green-600' : 'text-red-500'}>
-                        {row.totalNetResult > 0 ? `+${row.totalNetResult}` : row.totalNetResult}
+                    {/* Season Points (Running Net Total) */}
+                    <td className="py-3.5 px-4 text-center font-bold text-sm bg-blue-50/50">
+                      <span className={`font-mono ${row.seasonPoints > 0 ? 'text-green-700' : row.seasonPoints < 0 ? 'text-rose-700' : 'text-blue-700'}`}>
+                        {row.seasonPoints > 0 ? `+${row.seasonPoints}` : row.seasonPoints} pts
                       </span>
                     </td>
 
+                    {/* Team Points */}
+                    <td className="py-3.5 px-4 text-center text-slate-700 font-mono font-semibold">
+                      {row.totalTeamPoints}
+                    </td>
+
                     {/* Average Net Result */}
-                    <td className="py-3.5 px-3 text-center font-mono text-slate-500">
-                      {row.avgNetResult > 0 ? `+${row.avgNetResult}` : row.avgNetResult}
+                    <td className="py-3.5 px-4 text-center font-mono font-medium">
+                      <span className={row.avgNetResult > 0 ? 'text-green-700' : row.avgNetResult < 0 ? 'text-rose-700' : 'text-slate-500'}>
+                        {row.avgNetResult > 0 ? `+${row.avgNetResult}` : row.avgNetResult}
+                      </span>
                     </td>
 
                     {/* Current Quota & Lock Indicator */}
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800 font-mono text-xs">
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-mono text-xs font-semibold">
                         <span>{row.currentQuota}</span>
-                        {row.quotaLocked && <Lock className="w-2.5 h-2.5 text-amber-500" />}
+                        {row.quotaLocked && <Lock className="w-3 h-3 text-amber-500" />}
                       </span>
                     </td>
 
                     {/* Zone Badge */}
-                    <td className="py-3.5 px-3 text-right">
+                    <td className="py-3.5 px-4 text-right">
                       {isTop4 ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
                           PLAYOFFS
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                           CONSOLATION
                         </span>
                       )}

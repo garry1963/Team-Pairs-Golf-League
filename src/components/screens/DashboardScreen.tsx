@@ -187,12 +187,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <tr>
                   <th className="py-2.5 px-3">Pos</th>
                   <th className="py-2.5 px-3">Team</th>
-                  <th className="py-2.5 px-2 text-center">P</th>
-                  <th className="py-2.5 px-2 text-center">W</th>
-                  <th className="py-2.5 px-2 text-center">D</th>
-                  <th className="py-2.5 px-2 text-center">L</th>
-                  <th className="py-2.5 px-3 text-center font-bold text-blue-700">Season Pts</th>
-                  <th className="py-2.5 px-3 text-right">Net</th>
+                  <th className="py-2.5 px-3 text-center font-bold text-blue-700 bg-blue-50/50">Season Pts</th>
+                  <th className="py-2.5 px-3 text-center">Team Pts</th>
+                  <th className="py-2.5 px-3 text-right">Quota</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -214,17 +211,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       <div>{row.teamName}</div>
                       <div className="text-[10px] text-slate-400 font-normal">{row.playerAName} & {row.playerBName}</div>
                     </td>
-                    <td className="py-3 px-2 text-center text-slate-600">{row.played}</td>
-                    <td className="py-3 px-2 text-center font-semibold text-green-600">{row.wins}</td>
-                    <td className="py-3 px-2 text-center text-slate-400">{row.draws}</td>
-                    <td className="py-3 px-2 text-center text-red-500">{row.losses}</td>
                     <td className="py-3 px-3 text-center font-bold text-blue-700 bg-blue-50/50">
-                      {row.seasonPoints}
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold">
-                      <span className={row.totalNetResult >= 0 ? 'text-green-600' : 'text-red-500'}>
-                        {row.totalNetResult > 0 ? `+${row.totalNetResult}` : row.totalNetResult}
+                      <span className={`font-mono ${row.seasonPoints > 0 ? 'text-green-700' : row.seasonPoints < 0 ? 'text-rose-700' : 'text-blue-700'}`}>
+                        {row.seasonPoints > 0 ? `+${row.seasonPoints}` : row.seasonPoints}
                       </span>
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono text-slate-700">
+                      {row.totalTeamPoints}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-medium text-slate-700">
+                      {row.currentQuota}
                     </td>
                   </tr>
                 ))}
