@@ -168,6 +168,7 @@ export default function App() {
             teamResults={dbState.teamResults}
             onSelectFixture={handleSelectFixture}
             onNavigate={handleNavigate}
+            onToast={addToast}
           />
         );
 
@@ -256,6 +257,7 @@ export default function App() {
             fixtures={dbState.fixtures}
             standings={standings}
             teams={dbState.teams}
+            courses={dbState.courses}
             onToast={addToast}
             onNavigate={handleNavigate}
           />

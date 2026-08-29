@@ -1192,6 +1192,89 @@ export class DatabaseEngine {
     return true;
   }
 
+  public static updateFixtureCourse(fixtureId: number, courseId: number): { success: boolean; message: string } {
+    const state = this.getState();
+    const fixture = state.fixtures.find(f => f.id === fixtureId);
+    if (!fixture) return { success: false, message: 'Fixture not found.' };
+
+    const course = state.courses.find(c => c.id === courseId);
+    if (!course) return { success: false, message: 'Selected course not found.' };
+
+    const oldCourse = state.courses.find(c => c.id === fixture.courseId);
+    const oldCourseName = oldCourse?.courseName || `Course #${fixture.courseId}`;
+
+    fixture.courseId = courseId;
+    fixture.updatedAt = new Date().toISOString();
+
+    // If there are existing playerScores on this fixture, update coursePar and relativeToPar
+    const existingScores = state.playerScores.filter(s => s.fixtureId === fixtureId);
+    if (existingScores.length > 0) {
+      existingScores.forEach(score => {
+        score.coursePar = course.par;
+        if (score.grossScore !== null && score.scoreStatus !== 'DNF') {
+          score.relativeToPar = score.grossScore - course.par;
+        }
+        score.updatedAt = new Date().toISOString();
+      });
+    }
+
+    this.saveState(state);
+    this.logAudit(
+      'FIXTURE_COURSE_CHANGED',
+      'FIXTURE',
+      fixtureId,
+      oldCourseName,
+      course.courseName,
+      `Changed host course for Week ${fixture.weekNumber} match to ${course.courseName} (Par ${course.par}).`
+    );
+
+    return {
+      success: true,
+      message: `Host course updated to "${course.courseName}" (Par ${course.par}).`
+    };
+  }
+
+  public static updateWeekCourse(seasonId: number, weekNumber: number, courseId: number): { success: boolean; message: string } {
+    const state = this.getState();
+    const course = state.courses.find(c => c.id === courseId);
+    if (!course) return { success: false, message: 'Selected course not found.' };
+
+    const weekFixtures = state.fixtures.filter(f => f.seasonId === seasonId && f.weekNumber === weekNumber);
+    if (weekFixtures.length === 0) {
+      return { success: false, message: `No fixtures found for Week ${weekNumber}.` };
+    }
+
+    const now = new Date().toISOString();
+    weekFixtures.forEach(fix => {
+      fix.courseId = courseId;
+      fix.updatedAt = now;
+
+      const existingScores = state.playerScores.filter(s => s.fixtureId === fix.id);
+      existingScores.forEach(score => {
+        score.coursePar = course.par;
+        if (score.grossScore !== null && score.scoreStatus !== 'DNF') {
+          score.relativeToPar = score.grossScore - course.par;
+        }
+        score.updatedAt = now;
+      });
+    });
+
+    this.saveState(state);
+    this.logAudit(
+      'WEEK_COURSE_CHANGED',
+      'SEASON',
+      seasonId,
+      undefined,
+      `Week ${weekNumber} set to ${course.courseName} (Par ${course.par})`,
+      `Applied ${course.courseName} as host course across all ${weekFixtures.length} matches in Week ${weekNumber}.`
+    );
+
+    return {
+      success: true,
+      message: `Set host course for all ${weekFixtures.length} matches in Week ${weekNumber} to "${course.courseName}" (Par ${course.par}).`
+    };
+  }
+
   public static updateSettings(newSettings: Partial<AppSettings>) {
     const state = this.getState();
     state.settings = { ...state.settings, ...newSettings };

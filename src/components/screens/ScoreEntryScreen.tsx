@@ -227,13 +227,37 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
 
       {/* Course & Quota Header Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-          <div className="text-slate-500 flex items-center space-x-1.5 mb-1">
-            <Flag className="w-4 h-4 text-blue-600" />
-            <span className="font-semibold text-slate-700">Host Course:</span>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-1.5">
+          <div className="text-slate-500 flex items-center justify-between">
+            <div className="flex items-center space-x-1.5">
+              <Flag className="w-4 h-4 text-blue-600" />
+              <span className="font-semibold text-slate-700">Host Course:</span>
+            </div>
+            <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
+              Par {course.par} &bull; {course.tees}
+            </span>
           </div>
-          <div className="font-bold text-slate-900">{course.courseName}</div>
-          <div className="text-[11px] text-blue-600 font-medium">Par {course.par} &bull; {course.tees}</div>
+          <select
+            value={fixture.courseId}
+            onChange={(e) => {
+              const newCourseId = Number(e.target.value);
+              const res = DatabaseEngine.updateFixtureCourse(fixture.id, newCourseId);
+              if (!res.success) {
+                setErrorMessage(res.message);
+              }
+            }}
+            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            title="Switch host course for this match"
+          >
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.courseName} (Par {c.par}, {c.tees})
+              </option>
+            ))}
+          </select>
+          <div className="text-[10px] text-slate-400">
+            {course.location || 'Official Links Venue'} {course.slope ? `• Slope ${course.slope}` : ''}
+          </div>
         </div>
 
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">

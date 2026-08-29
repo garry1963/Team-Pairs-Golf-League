@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Calendar, Flag, Edit3, CheckCircle2, Clock, Trophy, AlertCircle, ArrowRight } from 'lucide-react';
+import { Calendar, Flag, Edit3, CheckCircle2, Trophy, ArrowRight, Check } from 'lucide-react';
 import { Fixture, Season, Team, Course, TeamResult } from '../../types';
+import { DatabaseEngine } from '../../storage/db';
 
 interface FixturesScreenProps {
   season: Season;
@@ -10,6 +11,7 @@ interface FixturesScreenProps {
   teamResults: TeamResult[];
   onSelectFixture: (fixtureId: number) => void;
   onNavigate: (screen: string) => void;
+  onToast?: (type: 'success' | 'error' | 'warning' | 'info', title: string, msg: string) => void;
 }
 
 export const FixturesScreen: React.FC<FixturesScreenProps> = ({
@@ -19,9 +21,11 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
   courses,
   teamResults,
   onSelectFixture,
-  onNavigate
+  onNavigate,
+  onToast
 }) => {
   const [selectedWeek, setSelectedWeek] = useState<number>(season.currentWeek);
+  const [selectedCourseForWeek, setSelectedCourseForWeek] = useState<number>(courses[0]?.id || 1);
 
   const teamMap = new Map<number, Team>();
   teams.forEach(t => teamMap.set(t.id, t));
@@ -43,6 +47,29 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
   const filteredFixtures = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === selectedWeek);
   const matchesPerWeekCount = filteredFixtures.length || (fixtures.length > 0 ? Math.round(fixtures.length / Math.max(1, regularWeeksCount)) : 5);
 
+  // Check dominant course for the current week
+  const weekCourseIds: number[] = Array.from(new Set(filteredFixtures.map(f => f.courseId)));
+  const primaryWeekCourse = weekCourseIds.length === 1 ? courseMap.get(weekCourseIds[0]) : null;
+
+  const handleSetCourseForFixture = (fixtureId: number, courseId: number) => {
+    const res = DatabaseEngine.updateFixtureCourse(fixtureId, courseId);
+    if (res.success) {
+      if (onToast) onToast('success', 'Match Course Updated', res.message);
+    } else {
+      if (onToast) onToast('error', 'Update Failed', res.message);
+    }
+  };
+
+  const handleApplyCourseToAllWeek = () => {
+    if (!selectedCourseForWeek) return;
+    const res = DatabaseEngine.updateWeekCourse(season.id, selectedWeek, selectedCourseForWeek);
+    if (res.success) {
+      if (onToast) onToast('success', `Week ${selectedWeek} Course Set`, res.message);
+    } else {
+      if (onToast) onToast('error', 'Update Failed', res.message);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-7xl mx-auto overflow-y-auto custom-scrollbar">
       {/* Screen Header */}
@@ -61,6 +88,13 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => onNavigate('courses')}
+            className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center space-x-1.5"
+          >
+            <Flag className="w-3.5 h-3.5 text-blue-600" />
+            <span>Course Library ({courses.length})</span>
+          </button>
           <button
             onClick={() => onNavigate('settings')}
             className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
@@ -162,6 +196,59 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
             </button>
           </div>
 
+          {/* Week Host Course Quick Setter Bar */}
+          {filteredFixtures.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Flag className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center space-x-2">
+                    <span>Host Course for Week {selectedWeek}</span>
+                    {primaryWeekCourse ? (
+                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-semibold">
+                        Par {primaryWeekCourse.par} &bull; {primaryWeekCourse.tees}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">
+                        Mixed / Custom Courses Assigned
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {primaryWeekCourse
+                      ? `${primaryWeekCourse.courseName}${primaryWeekCourse.location ? ` (${primaryWeekCourse.location})` : ''}`
+                      : 'Different matches in Week ' + selectedWeek + ' are assigned to separate courses.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Set All Matches in Week Dropdown & Button */}
+              <div className="flex items-center space-x-2 self-end md:self-center">
+                <select
+                  value={selectedCourseForWeek}
+                  onChange={(e) => setSelectedCourseForWeek(Number(e.target.value))}
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.courseName} (Par {c.par})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleApplyCourseToAllWeek}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition flex items-center space-x-1.5 whitespace-nowrap"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Set for All Week {selectedWeek} Matches</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Fixtures List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs text-slate-500 px-1">
@@ -172,7 +259,7 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
                   ? `Week ${championshipWeek} Championship Match`
                   : `Week ${selectedWeek} Regular Season Fixtures (${filteredFixtures.length} Matches)`}
               </span>
-              <span>Click any card to open score entry</span>
+              <span>Click card to enter scores &bull; Set individual course per match below</span>
             </div>
 
             {filteredFixtures.length === 0 ? (
@@ -203,12 +290,30 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
                       }}
                       className="bg-white rounded-xl border border-slate-200 hover:border-blue-400 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group space-y-4"
                     >
-                      {/* Fixture Top Info */}
+                      {/* Fixture Top Info with Course Selector */}
                       <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2.5">
-                        <div className="flex items-center space-x-1.5 text-slate-500">
-                          <Flag className="w-3.5 h-3.5 text-blue-600" />
-                          <span className="font-semibold text-slate-800">{course?.courseName || 'Championship Course'}</span>
-                          <span>(Par {course?.par || 72})</span>
+                        <div
+                          className="flex items-center space-x-1.5 text-slate-700 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2 py-1 rounded-lg transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <Flag className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <select
+                            value={fix.courseId}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleSetCourseForFixture(fix.id, Number(e.target.value));
+                            }}
+                            className="bg-transparent border-0 text-slate-800 text-xs font-semibold focus:outline-none cursor-pointer pr-1"
+                            title="Set golf course for this weekly fixture"
+                          >
+                            {courses.map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.courseName} (Par {c.par})
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div>
@@ -293,8 +398,10 @@ export const FixturesScreen: React.FC<FixturesScreenProps> = ({
 
                       {/* Card Bottom CTA */}
                       <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-[11px] text-slate-400">
-                          Date: {fix.fixtureDate}
+                        <span className="text-[11px] text-slate-400 flex items-center space-x-1">
+                          <span>{course?.tees || 'White Tees'}</span>
+                          <span>&bull;</span>
+                          <span>Par {course?.par || 72}</span>
                         </span>
                         <span className="text-blue-600 font-semibold text-xs flex items-center space-x-1 group-hover:translate-x-0.5 transition">
                           <Edit3 className="w-3.5 h-3.5" />

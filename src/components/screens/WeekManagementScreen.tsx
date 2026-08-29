@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
   Calendar, Clock, CheckCircle2, AlertTriangle, Lock,
-  Play, ArrowRight, ShieldAlert, Sparkles, RefreshCw, Trophy
+  Play, ArrowRight, ShieldAlert, Sparkles, RefreshCw, Trophy, Flag, Check
 } from 'lucide-react';
-import { Season, Fixture, StandingsRow, Team } from '../../types';
+import { Season, Fixture, StandingsRow, Team, Course } from '../../types';
 import { DatabaseEngine } from '../../storage/db';
 
 interface WeekManagementScreenProps {
@@ -11,6 +11,7 @@ interface WeekManagementScreenProps {
   fixtures: Fixture[];
   standings: StandingsRow[];
   teams: Team[];
+  courses?: Course[];
   onToast: (type: 'success' | 'error' | 'warning', title: string, msg: string) => void;
   onNavigate: (screen: string) => void;
 }
@@ -20,6 +21,7 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
   fixtures,
   standings,
   teams,
+  courses = [],
   onToast,
   onNavigate
 }) => {
@@ -27,6 +29,7 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
   const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
   const [newDeadline, setNewDeadline] = useState('');
   const [extendReason, setExtendReason] = useState('');
+  const [weekCourseId, setWeekCourseId] = useState<number>(courses[0]?.id || 1);
 
   const weekFixtures = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === selectedWeek);
   const completedFixtures = weekFixtures.filter(f => f.status === 'COMPLETED');
@@ -74,6 +77,16 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
       setIsExtendModalOpen(false);
     } catch (e: any) {
       onToast('error', 'Action Failed', e.message);
+    }
+  };
+
+  const handleApplyWeekCourse = () => {
+    if (!weekCourseId) return;
+    const res = DatabaseEngine.updateWeekCourse(season.id, selectedWeek, weekCourseId);
+    if (res.success) {
+      onToast('success', 'Host Course Applied', res.message);
+    } else {
+      onToast('error', 'Action Failed', res.message);
     }
   };
 
@@ -229,6 +242,45 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
             </div>
           </button>
         </div>
+
+        {/* Host Course Assignment for Week */}
+        {courses.length > 0 && (
+          <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                <Flag className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900">Set Host Course for Week {selectedWeek}</h4>
+                <p className="text-[11px] text-slate-500">
+                  Assign or change the golf course for all {weekFixtures.length} matches in this week.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <select
+                value={weekCourseId}
+                onChange={e => setWeekCourseId(Number(e.target.value))}
+                className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+              >
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseName} (Par {c.par}, {c.tees})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleApplyWeekCourse}
+                className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition flex items-center space-x-1.5 whitespace-nowrap"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Apply Course to Week {selectedWeek}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Extend Deadline Modal */}
