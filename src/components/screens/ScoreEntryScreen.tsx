@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Trophy, Flag, CheckCircle2, AlertTriangle, Clock,
-  ArrowLeft, Save, Sparkles, Lock, ShieldAlert, Ban, RefreshCw, TrendingUp, Users, Check
+  ArrowLeft, Save, Sparkles, Lock, ShieldAlert, Ban, RefreshCw, TrendingUp, Users, Check, Calendar
 } from 'lucide-react';
 import { Fixture, Team, Player, Course, PlayerScore, TeamResult, Season } from '../../types';
 import { ScoringService } from '../../engine/scoring';
@@ -163,6 +163,14 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
     }
   };
 
+  const handleDateChange = (newDate: string) => {
+    if (!newDate) return;
+    const res = DatabaseEngine.updateWeekDate(season.id, selectedWeek, newDate);
+    if (res.success) {
+      onScoreSaved(`Week ${selectedWeek} playing date updated to ${newDate}`);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-7xl mx-auto overflow-y-auto custom-scrollbar">
       {/* Header Banner */}
@@ -203,30 +211,46 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
         </div>
       </div>
 
-      {/* Week Metadata & Host Course Bar */}
-      <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+      {/* Week Metadata, Host Course & Fixture Date Bar */}
+      <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-xl p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-start md:items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0 mt-0.5 md:mt-0">
             <Flag className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h2 className="text-sm font-bold text-slate-900">
-                Week {selectedWeek} Round &bull; Host Course:
-              </h2>
-              <select
-                value={course.id}
-                onChange={e => handleCourseChange(Number(e.target.value))}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
-              >
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.courseName} (Par {c.par})
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2">
+                <h2 className="text-sm font-bold text-slate-900">
+                  Week {selectedWeek} Course:
+                </h2>
+                <select
+                  value={course.id}
+                  onChange={e => handleCourseChange(Number(e.target.value))}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+                >
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.courseName} (Par {c.par})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Editable Fixture Date */}
+              <div className="flex items-center space-x-1.5 bg-white/90 px-2 py-0.5 rounded-lg border border-blue-100 shadow-2xs">
+                <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="text-xs font-semibold text-slate-700">Date:</span>
+                <input
+                  type="date"
+                  value={fixture.fixtureDate}
+                  onChange={e => handleDateChange(e.target.value)}
+                  className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  title="Edit scheduled date for this weekly fixture"
+                />
+              </div>
             </div>
-            <div className="flex items-center space-x-3 text-xs text-slate-500 mt-1">
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
               <span>Par {course.par}</span>
               <span>&bull;</span>
               <span>{course.tees}</span>
@@ -236,6 +260,10 @@ export const ScoreEntryScreen: React.FC<ScoreEntryScreenProps> = ({
                   <span>{course.location}</span>
                 </>
               )}
+              <span>&bull;</span>
+              <span className="text-blue-700 font-medium">
+                Scheduled: {new Date(fixture.fixtureDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
             </div>
           </div>
         </div>

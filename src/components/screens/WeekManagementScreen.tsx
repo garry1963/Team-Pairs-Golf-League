@@ -32,6 +32,17 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
   const [weekCourseId, setWeekCourseId] = useState<number>(courses[0]?.id || 1);
 
   const weekFixtures = fixtures.filter(f => f.seasonId === season.id && f.weekNumber === selectedWeek);
+  const [weekDate, setWeekDate] = useState<string>(weekFixtures[0]?.fixtureDate || '');
+
+  // Keep weekDate synced when selectedWeek changes
+  React.useEffect(() => {
+    const currentFix = fixtures.find(f => f.seasonId === season.id && f.weekNumber === selectedWeek);
+    if (currentFix) {
+      setWeekDate(currentFix.fixtureDate);
+      setWeekCourseId(currentFix.courseId);
+    }
+  }, [selectedWeek, fixtures, season.id]);
+
   const completedFixtures = weekFixtures.filter(f => f.status === 'COMPLETED');
   const outstandingFixtures = weekFixtures.filter(f => f.status !== 'COMPLETED');
 
@@ -40,6 +51,15 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
   const isPlayoffs = selectedWeek >= 16;
 
   // Actions
+  const handleSetWeekDate = () => {
+    if (!weekDate) return;
+    const res = DatabaseEngine.updateWeekDate(season.id, selectedWeek, weekDate);
+    if (res.success) {
+      onToast('success', `Week ${selectedWeek} Date Set`, res.message);
+    } else {
+      onToast('error', 'Action Failed', res.message);
+    }
+  };
   const handleOpenWeek = () => {
     try {
       DatabaseEngine.openWeek(season.id, selectedWeek);
@@ -243,44 +263,79 @@ export const WeekManagementScreen: React.FC<WeekManagementScreenProps> = ({
           </button>
         </div>
 
-        {/* Host Course Assignment for Week */}
-        {courses.length > 0 && (
-          <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Scheduled Fixture Date & Host Course Assignment for Week */}
+        <div className="pt-4 border-t border-slate-100 space-y-4">
+          {/* Scheduled Date for Week */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
-                <Flag className="w-5 h-5" />
+                <Calendar className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900">Set Host Course for Week {selectedWeek}</h4>
+                <h4 className="text-xs font-bold text-slate-900">Set Scheduled Fixture Date for Week {selectedWeek}</h4>
                 <p className="text-[11px] text-slate-500">
-                  Assign or change the golf course for all {weekFixtures.length} matches in this week.
+                  Configure or reschedule the playing date for this weekly round.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center space-x-2">
-              <select
-                value={weekCourseId}
-                onChange={e => setWeekCourseId(Number(e.target.value))}
-                className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
-              >
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.courseName} (Par {c.par}, {c.tees})
-                  </option>
-                ))}
-              </select>
+              <input
+                type="date"
+                value={weekDate}
+                onChange={e => setWeekDate(e.target.value)}
+                className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+              />
               <button
                 type="button"
-                onClick={handleApplyWeekCourse}
+                onClick={handleSetWeekDate}
                 className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition flex items-center space-x-1.5 whitespace-nowrap"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Apply Course to Week {selectedWeek}</span>
+                <span>Save Date</span>
               </button>
             </div>
           </div>
-        )}
+
+          {/* Host Course Assignment for Week */}
+          {courses.length > 0 && (
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                  <Flag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Set Host Course for Week {selectedWeek}</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Assign or change the golf course for all matches in this week.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <select
+                  value={weekCourseId}
+                  onChange={e => setWeekCourseId(Number(e.target.value))}
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                >
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.courseName} (Par {c.par}, {c.tees})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleApplyWeekCourse}
+                  className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition flex items-center space-x-1.5 whitespace-nowrap"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Apply Course</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Extend Deadline Modal */}

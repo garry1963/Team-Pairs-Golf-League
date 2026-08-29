@@ -1285,6 +1285,102 @@ export class DatabaseEngine {
     };
   }
 
+  public static updateFixtureDate(
+    fixtureId: number,
+    newDate: string,
+    newDeadline?: string
+  ): { success: boolean; message: string } {
+    const state = this.getState();
+    const fixture = state.fixtures.find(f => f.id === fixtureId);
+    if (!fixture) return { success: false, message: 'Fixture not found.' };
+
+    const oldDate = fixture.fixtureDate;
+    fixture.fixtureDate = newDate;
+
+    if (newDeadline) {
+      fixture.deadline = newDeadline;
+    } else {
+      // Automatically recalculate deadline (+2 days, 18:00 UTC) based on new fixture date
+      try {
+        const fixtureDateObj = new Date(newDate);
+        if (!isNaN(fixtureDateObj.getTime())) {
+          const deadlineObj = new Date(fixtureDateObj.getTime() + 2 * 24 * 60 * 60 * 1000 + 18 * 60 * 60 * 1000);
+          fixture.deadline = deadlineObj.toISOString();
+        }
+      } catch (e) {
+        // preserve existing deadline if date parsing fails
+      }
+    }
+
+    const now = new Date().toISOString();
+    fixture.updatedAt = now;
+
+    this.saveState(state);
+    this.logAudit(
+      'FIXTURE_DATE_CHANGED',
+      'FIXTURE',
+      fixtureId,
+      oldDate,
+      newDate,
+      `Changed fixture date for Week ${fixture.weekNumber} match to ${newDate}.`
+    );
+
+    return {
+      success: true,
+      message: `Fixture date updated to ${newDate}.`
+    };
+  }
+
+  public static updateWeekDate(
+    seasonId: number,
+    weekNumber: number,
+    newDate: string,
+    newDeadline?: string
+  ): { success: boolean; message: string } {
+    const state = this.getState();
+    const weekFixtures = state.fixtures.filter(f => f.seasonId === seasonId && f.weekNumber === weekNumber);
+    if (weekFixtures.length === 0) {
+      return { success: false, message: `No fixtures found for Week ${weekNumber}.` };
+    }
+
+    const now = new Date().toISOString();
+    let calculatedDeadline = newDeadline;
+    if (!calculatedDeadline) {
+      try {
+        const fixtureDateObj = new Date(newDate);
+        if (!isNaN(fixtureDateObj.getTime())) {
+          const deadlineObj = new Date(fixtureDateObj.getTime() + 2 * 24 * 60 * 60 * 1000 + 18 * 60 * 60 * 1000);
+          calculatedDeadline = deadlineObj.toISOString();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    weekFixtures.forEach(fix => {
+      fix.fixtureDate = newDate;
+      if (calculatedDeadline) {
+        fix.deadline = calculatedDeadline;
+      }
+      fix.updatedAt = now;
+    });
+
+    this.saveState(state);
+    this.logAudit(
+      'WEEK_DATE_CHANGED',
+      'SEASON',
+      seasonId,
+      undefined,
+      `Week ${weekNumber} scheduled date set to ${newDate}`,
+      `Updated scheduled date to ${newDate} for Week ${weekNumber}.`
+    );
+
+    return {
+      success: true,
+      message: `Week ${weekNumber} scheduled date updated to ${newDate}.`
+    };
+  }
+
   public static updateSettings(newSettings: Partial<AppSettings>) {
     const state = this.getState();
     state.settings = { ...state.settings, ...newSettings };

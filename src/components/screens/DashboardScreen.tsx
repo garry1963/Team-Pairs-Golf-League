@@ -240,6 +240,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <span className="text-xs font-semibold text-slate-900">
                   {weekResults.length} of {teams.length} Teams Submitted
                 </span>
+                {activeWeekFixture && (
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Playing Date: <strong className="text-blue-700">{new Date(activeWeekFixture.fixtureDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => {
