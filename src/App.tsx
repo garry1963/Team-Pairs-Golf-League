@@ -215,6 +215,7 @@ export default function App() {
             standings={standings}
             courses={dbState.courses}
             onBack={() => setCurrentScreen('teams')}
+            onToast={addToast}
           />
         );
 

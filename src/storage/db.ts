@@ -1177,6 +1177,166 @@ export class DatabaseEngine {
     return true;
   }
 
+  public static removeTeam(teamId: number, reason?: string): { success: boolean; message: string } {
+    const state = this.getState();
+    const teamIndex = state.teams.findIndex(t => t.id === teamId);
+    if (teamIndex === -1) {
+      return { success: false, message: 'Team not found in the database.' };
+    }
+
+    const team = state.teams[teamIndex];
+    const teamName = team.teamName;
+    const seasonId = team.seasonId;
+
+    // 1. Remove the team from state.teams
+    state.teams.splice(teamIndex, 1);
+
+    // 2. Remove associated teamResults
+    state.teamResults = state.teamResults.filter(tr => tr.teamId !== teamId);
+
+    // 3. Remove associated playerScores for this team
+    state.playerScores = state.playerScores.filter(ps => ps.teamId !== teamId);
+
+    // 4. Remove associated quotaHistory
+    state.quotaHistory = state.quotaHistory.filter(qh => qh.teamId !== teamId);
+
+    // 5. Remove from standings if stored
+    state.standings = state.standings.filter(s => s.teamId !== teamId);
+
+    // 6. Clean up playoff references or pairwise fixtures if any
+    state.playoffs = state.playoffs.filter(p => p.teamAId !== teamId && p.teamBId !== teamId);
+    state.fixtures.forEach(f => {
+      if (f.teamAId === teamId) f.teamAId = undefined;
+      if (f.teamBId === teamId) f.teamBId = undefined;
+      if (f.winnerTeamId === teamId) f.winnerTeamId = null;
+    });
+
+    // 7. Clean up season championship or runner-up references
+    state.seasons.forEach(s => {
+      if (s.championTeamId === teamId) s.championTeamId = undefined;
+      if (s.runnerUpTeamId === teamId) s.runnerUpTeamId = undefined;
+    });
+
+    // 8. Re-evaluate fixture status for all regular season rounds
+    const remainingActiveTeams = state.teams.filter(t => t.seasonId === seasonId && t.active);
+    state.fixtures.filter(f => f.seasonId === seasonId && !f.isPlayoff).forEach(f => {
+      const submittedCount = state.teamResults.filter(tr => tr.fixtureId === f.id).length;
+      if (remainingActiveTeams.length > 0 && submittedCount >= remainingActiveTeams.length) {
+        f.status = 'COMPLETED';
+      } else if (submittedCount > 0) {
+        f.status = 'IN_PROGRESS';
+      }
+    });
+
+    // 9. Recalculate season standings
+    state.standings = StandingsService.calculateStandings(
+      seasonId,
+      state.teams,
+      state.players,
+      state.fixtures,
+      state.teamResults,
+      state.settings
+    );
+
+    this.saveState(state);
+
+    const auditMessage = reason
+      ? `Team "${teamName}" removed: ${reason}`
+      : `Removed team "${teamName}" from the league. Associated match scores and results were purged from standings.`;
+    this.logAudit('TEAM_REMOVED', 'TEAM', teamId, teamName, undefined, auditMessage);
+
+    return {
+      success: true,
+      message: `Team "${teamName}" has been successfully removed from the league.`
+    };
+  }
+
+  public static replaceTeamPlayer(
+    teamId: number,
+    slotToReplace: 'playerA' | 'playerB',
+    newPlayerId: number,
+    newQuota?: number,
+    reason?: string
+  ): { success: boolean; message: string } {
+    const state = this.getState();
+    const team = state.teams.find(t => t.id === teamId);
+    if (!team) return { success: false, message: 'Team not found.' };
+
+    const currentSlotPlayerId = slotToReplace === 'playerA' ? team.playerAId : team.playerBId;
+    if (currentSlotPlayerId === newPlayerId) {
+      return { success: false, message: 'The selected player is already assigned to this slot on the team.' };
+    }
+
+    const otherSlotPlayerId = slotToReplace === 'playerA' ? team.playerBId : team.playerAId;
+    if (newPlayerId === otherSlotPlayerId) {
+      return { success: false, message: 'Player A and Player B cannot be the same person.' };
+    }
+
+    const newPlayer = state.players.find(p => p.id === newPlayerId);
+    if (!newPlayer) {
+      return { success: false, message: 'Replacement player was not found in the player roster.' };
+    }
+
+    const oldPlayer = state.players.find(p => p.id === currentSlotPlayerId);
+    const oldPlayerName = oldPlayer ? oldPlayer.displayName : `Player #${currentSlotPlayerId}`;
+    const newPlayerName = newPlayer.displayName;
+
+    // Update team slot
+    if (slotToReplace === 'playerA') {
+      team.playerAId = newPlayerId;
+    } else {
+      team.playerBId = newPlayerId;
+    }
+
+    const now = new Date().toISOString();
+    team.updatedAt = now;
+
+    // Optional quota update if requested
+    let quotaChangeMsg = '';
+    if (newQuota !== undefined && !isNaN(newQuota) && newQuota >= 20 && newQuota <= 120 && newQuota !== team.currentQuota) {
+      const prevQuota = team.currentQuota;
+      team.currentQuota = newQuota;
+      state.quotaHistory.unshift({
+        id: Date.now(),
+        teamId: team.id,
+        seasonId: team.seasonId,
+        quota: newQuota,
+        effectiveFrom: now,
+        locked: team.quotaLocked,
+        reason: reason || `Roster change adjustment: substituted ${oldPlayerName} with ${newPlayerName} (HCP ${newPlayer.handicap ?? 'N/A'}).`,
+        createdAt: now
+      });
+      quotaChangeMsg = ` Team quota updated from ${prevQuota} to ${newQuota}.`;
+    }
+
+    // Refresh standings with updated team composition
+    state.standings = StandingsService.calculateStandings(
+      team.seasonId,
+      state.teams,
+      state.players,
+      state.fixtures,
+      state.teamResults,
+      state.settings
+    );
+
+    this.saveState(state);
+
+    const auditText = reason || `Replaced ${oldPlayerName} with ${newPlayerName} from the player roster.${quotaChangeMsg}`;
+    this.logAudit(
+      'PLAYER_REPLACED',
+      'TEAM',
+      teamId,
+      oldPlayerName,
+      newPlayerName,
+      auditText
+    );
+
+    return {
+      success: true,
+      message: `Replaced ${oldPlayerName} with ${newPlayerName} on "${team.teamName}".${quotaChangeMsg}`
+    };
+  }
+
   public static addCourse(courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>): Course {
     const state = this.getState();
     const now = new Date().toISOString();
