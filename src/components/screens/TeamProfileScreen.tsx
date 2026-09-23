@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import {
   Trophy, Users, Calendar, ArrowLeft, Lock, Unlock,
   TrendingUp, Award, Clock, ArrowUpRight, ArrowDownRight, Flag,
-  ArrowRightLeft, Trash2, UserPlus, AlertTriangle, Check, X, Plus
+  ArrowRightLeft, Trash2, UserPlus, AlertTriangle, Check, X, Plus,
+  Edit2, ShieldAlert
 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
 import { Team, Player, Fixture, TeamResult, StandingsRow, Season, Course } from '../../types';
@@ -53,6 +54,12 @@ export const TeamProfileScreen: React.FC<TeamProfileScreenProps> = ({
   // Remove Team Modal State
   const [isRemoveModalOpen, setIsRemoveModalOpen] = useState<boolean>(false);
   const [removeReason, setRemoveReason] = useState<string>('');
+
+  // Change Quota Modal State
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState<boolean>(false);
+  const [quotaInputVal, setQuotaInputVal] = useState<string>('');
+  const [quotaReasonText, setQuotaReasonText] = useState<string>('');
+  const [quotaSuperAdminOverride, setQuotaSuperAdminOverride] = useState<boolean>(false);
 
   if (!team) {
     return (
@@ -150,6 +157,36 @@ export const TeamProfileScreen: React.FC<TeamProfileScreenProps> = ({
     }
   };
 
+  const handleOpenQuotaModal = () => {
+    setQuotaInputVal(String(team.currentQuota));
+    setQuotaReasonText('');
+    setQuotaSuperAdminOverride(false);
+    setIsQuotaModalOpen(true);
+  };
+
+  const handleSaveQuota = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const quotaNum = parseInt(quotaInputVal, 10);
+    if (isNaN(quotaNum) || quotaNum < 10 || quotaNum > 150) {
+      onToast?.('error', 'Invalid Quota', 'Quota must be a valid number between 10 and 150.');
+      return;
+    }
+
+    const res = DatabaseEngine.updateTeamQuota(
+      team.id,
+      quotaNum,
+      quotaReasonText || 'Manual quota adjustment',
+      quotaSuperAdminOverride
+    );
+
+    if (res.success) {
+      onToast?.('success', 'Quota Updated', res.message);
+      setIsQuotaModalOpen(false);
+    } else {
+      onToast?.('error', 'Quota Protected', res.message);
+    }
+  };
+
   // Get completed weekly results for this team
   const teamCompletedResults = teamResults
     .filter(tr => tr.teamId === team.id)
@@ -213,7 +250,17 @@ export const TeamProfileScreen: React.FC<TeamProfileScreenProps> = ({
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center space-x-6">
             <div>
               <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Current Quota</span>
-              <span className="font-mono text-2xl font-bold text-blue-700">{team.currentQuota}</span>
+              <div className="flex items-center space-x-2">
+                <span className="font-mono text-2xl font-bold text-blue-700">{team.currentQuota}</span>
+                <button
+                  type="button"
+                  onClick={handleOpenQuotaModal}
+                  className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-blue-600 transition"
+                  title="Change Quota"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             {team.playoffQuota && (
               <div className="border-l border-slate-200 pl-6">
@@ -224,6 +271,15 @@ export const TeamProfileScreen: React.FC<TeamProfileScreenProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            <button
+              onClick={handleOpenQuotaModal}
+              className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 text-xs font-semibold transition flex items-center space-x-1.5 shadow-2xs"
+              title="Change Quota"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+              <span>Change Quota</span>
+            </button>
+
             <button
               onClick={() => handleOpenReplaceModal('playerA')}
               className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 text-xs font-semibold transition flex items-center space-x-1.5 shadow-2xs"
@@ -729,6 +785,103 @@ export const TeamProfileScreen: React.FC<TeamProfileScreenProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Change Quota Modal with Lock Protection */}
+      {isQuotaModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <form onSubmit={handleSaveQuota} className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Change Quota
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {team.teamName} &bull; Current: <span className="font-mono font-bold text-blue-700">{team.currentQuota}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuotaModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {team.quotaLocked && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1">
+                <div className="flex items-center space-x-2 font-bold">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Quota Lock Active (Week 15 Rule)</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Playoff quotas are permanently locked after Week 15. Standard quota edits are disabled. SuperAdmin override is required to alter a locked playoff quota.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  New Quota Target (10 - 150)
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={150}
+                  required
+                  value={quotaInputVal}
+                  onChange={e => setQuotaInputVal(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono font-bold text-base focus:outline-none focus:border-blue-500 shadow-2xs"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Audit Reason for Adjustment</label>
+                <input
+                  type="text"
+                  value={quotaReasonText}
+                  onChange={e => setQuotaReasonText(e.target.value)}
+                  placeholder="e.g. Handicap revision or review committee ruling"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {team.quotaLocked && (
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="teamProfileOverride"
+                    checked={quotaSuperAdminOverride}
+                    onChange={e => setQuotaSuperAdminOverride(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="teamProfileOverride" className="text-amber-800 font-semibold text-[11px] cursor-pointer">
+                    Enable SuperAdmin Postseason Override
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsQuotaModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Save Quota
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

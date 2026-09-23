@@ -451,6 +451,15 @@ export class DatabaseEngine {
       createdAt: new Date().toISOString()
     });
 
+    state.standings = StandingsService.calculateStandings(
+      team.seasonId,
+      state.teams,
+      state.players,
+      state.fixtures,
+      state.teamResults,
+      state.settings
+    );
+
     this.saveState(state);
     this.logAudit(
       'QUOTA_CHANGED',

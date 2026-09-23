@@ -68,11 +68,12 @@ export const TeamsScreen: React.FC<TeamsScreenProps> = ({
     setSuperAdminOverride(false);
   };
 
-  const handleSaveQuota = () => {
+  const handleSaveQuota = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!quotaModalTeam) return;
     const quotaNum = parseInt(newQuotaVal, 10);
-    if (isNaN(quotaNum) || quotaNum < 30 || quotaNum > 100) {
-      onToast('error', 'Invalid Quota', 'Quota must be a realistic number between 30 and 100.');
+    if (isNaN(quotaNum) || quotaNum < 10 || quotaNum > 150) {
+      onToast('error', 'Invalid Quota', 'Quota must be a valid number between 10 and 150.');
       return;
     }
 
@@ -676,6 +677,188 @@ export const TeamsScreen: React.FC<TeamsScreenProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Change Quota Modal with Lock Protection */}
+      {quotaModalTeam && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <form onSubmit={handleSaveQuota} className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Change Quota
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {quotaModalTeam.teamName} &bull; Current: <span className="font-mono font-bold text-blue-700">{quotaModalTeam.currentQuota}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuotaModalTeam(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {quotaModalTeam.quotaLocked && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1">
+                <div className="flex items-center space-x-2 font-bold">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Quota Lock Active (Week 15 Rule)</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Playoff quotas are permanently locked after Week 15. Standard quota edits are disabled. SuperAdmin override is required to alter a locked playoff quota.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  New Quota Target (10 - 150)
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={150}
+                  required
+                  value={newQuotaVal}
+                  onChange={e => setNewQuotaVal(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono font-bold text-base focus:outline-none focus:border-blue-500 shadow-2xs"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Audit Reason for Adjustment</label>
+                <input
+                  type="text"
+                  value={quotaReason}
+                  onChange={e => setQuotaReason(e.target.value)}
+                  placeholder="e.g. Handicap revision or review committee ruling"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {quotaModalTeam.quotaLocked && (
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="override"
+                    checked={superAdminOverride}
+                    onChange={e => setSuperAdminOverride(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="override" className="text-amber-800 font-semibold text-[11px] cursor-pointer">
+                    Enable SuperAdmin Postseason Override
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setQuotaModalTeam(null)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Save Quota
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Add Team Modal */}
+      {isAddTeamModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <form onSubmit={handleCreateTeam} className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Register New Pairs Team</h3>
+              <button type="button" onClick={() => setIsAddTeamModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Team Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newTeamName}
+                  onChange={e => setNewTeamName(e.target.value)}
+                  placeholder="e.g. Iron Masters"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Player A</label>
+                  <select
+                    value={newPlayerAId}
+                    onChange={e => setNewPlayerAId(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+                  >
+                    {players.map(p => (
+                      <option key={p.id} value={p.id}>{p.displayName} (HCP {p.handicap ?? 'N/A'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Player B</label>
+                  <select
+                    value={newPlayerBId}
+                    onChange={e => setNewPlayerBId(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+                  >
+                    {players.map(p => (
+                      <option key={p.id} value={p.id}>{p.displayName} (HCP {p.handicap ?? 'N/A'})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Initial Team Quota</label>
+                <input
+                  type="number"
+                  min={10}
+                  max={150}
+                  required
+                  value={newTeamQuota}
+                  onChange={e => setNewTeamQuota(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsAddTeamModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
+              >
+                Save Team
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
